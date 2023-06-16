@@ -6,6 +6,15 @@ Betaflight is flight controller software (firmware) used to fly multi-rotor craf
 
 This fork differs from Baseflight and Cleanflight in that it focuses on flight performance, leading-edge feature additions, and wide target support.
 
+
+## Robin and Stavrow Notes
+To build hex file for Speedybee F7 Mini:
+```
+make STM32F7X2
+```
+The hex file is generated in obj/ folder
+
+
 ## Events
 
 | Date  | Event |
