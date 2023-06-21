@@ -80,7 +80,7 @@
 #pragma GCC diagnostic pop
 
 #define TELEMETRY_MAVLINK_INITIAL_PORT_MODE MODE_TX
-#define TELEMETRY_MAVLINK_MAXRATE 50
+#define TELEMETRY_MAVLINK_MAXRATE 1000
 #define TELEMETRY_MAVLINK_DELAY ((1000 * 1000) / TELEMETRY_MAVLINK_MAXRATE)
 
 extern uint16_t rssi; // FIXME dependency on mw.c
@@ -109,7 +109,7 @@ static uint32_t lastMavlinkMessage = 0;
 
 static int mavlinkStreamTrigger(enum MAV_DATA_STREAM streamNum) // in our case, we need to run our mavrate at mavlink maxrate I guess.
 {
-    uint8_t rate = (uint8_t) mavRates[streamNum];
+    uint16_t rate = (uint8_t) mavRates[streamNum];
     if (rate == 0) {
         return 0;
     }
@@ -266,6 +266,58 @@ void mavlinkSendSystemStatus(void)
     msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
     mavlinkSerialWrite(mavBuffer, msgLength);
 }
+
+
+
+
+void mavlinkSendrawIMU(void)
+{
+    uint16_t msgLength;
+
+/**
+ * 
+ * @brief Pack a raw_imu message
+ * @param system_id ID of this system
+ * @param component_id ID of this component (e.g. 200 for IMU)
+ * @param msg The MAVLink message to compress the data into
+ *
+ * @param time_usec Timestamp (microseconds since UNIX epoch or microseconds since system boot)
+ * @param xacc X acceleration (raw)
+ * @param yacc Y acceleration (raw)
+ * @param zacc Z acceleration (raw)
+ * @param xgyro Angular speed around X axis (raw)
+ * @param ygyro Angular speed around Y axis (raw)
+ * @param zgyro Angular speed around Z axis (raw)
+
+ * @return length of the message in bytes (excluding serial stream start sign)
+ */
+// static inline uint16_t mavlink_msg_raw_imu_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
+// 						       uint64_t time_usec, int16_t xacc, int16_t yacc, int16_t zacc, int16_t xgyro, int16_t ygyro, int16_t zgyro, int16_t xmag, int16_t ymag, int16_t zmag)
+
+    // uint16_t test2 = acc.sampleRateHz;
+    float* test3 = acc.accADC;
+    int16_t xacc = (int16_t) test3[0];
+    int16_t yacc = (int16_t) test3[1];
+    int16_t zacc = (int16_t) test3[2];
+
+    int16_t xgyro = xacc;
+    int16_t ygyro = xacc;
+    int16_t zgyro = xacc;
+    
+    mavlink_msg_raw_imu_pack2(0, 200, &mavMsg, 12345,
+        // onboard_control_sensors_present Bitmask showing which onboard controllers and sensors are present.
+        //Value of 0: not present. Value of 1: present. Indices: 0: 3D gyro, 1: 3D acc, 2: 3D mag, 3: absolute pressure,
+        // 4: differential pressure, 5: GPS, 6: optical flow, 7: computer vision position, 8: laser based position,
+        // 9: external ground-truth (Vicon or Leica). Controllers: 10: 3D angular rate control 11: attitude stabilization,
+        // 12: yaw position, 13: z/altitude control, 14: x/y position control, 15: motor outputs / control
+        xacc, yacc, zacc,
+        // onboard_control_sensors_enabled Bitmask showing which onboard controllers and sensors are enabled
+        xgyro, ygyro, zgyro);//, xgyro, ygyro, zgyro);
+    msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
+    mavlinkSerialWrite(mavBuffer, msgLength);
+}
+
+
 
 void mavlinkSendRCChannelsAndRSSI(void)
 {
@@ -539,9 +591,7 @@ void processMAVLinkTelemetry(void)
 
 
     }
-    if (mavlinkStreamTrigger(MAV_DATA_STREAM_EXTRA2)) {
-        mavlinkSendHUDAndHeartbeat();
-    }
+    mavlinkSendrawIMU();
 }
 
 void handleMAVLinkTelemetry(void)
