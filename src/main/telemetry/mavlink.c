@@ -80,7 +80,7 @@
 #pragma GCC diagnostic pop
 
 #define TELEMETRY_MAVLINK_INITIAL_PORT_MODE MODE_TX
-#define TELEMETRY_MAVLINK_MAXRATE 1000
+#define TELEMETRY_MAVLINK_MAXRATE 100
 #define TELEMETRY_MAVLINK_DELAY ((1000 * 1000) / TELEMETRY_MAVLINK_MAXRATE)
 
 extern uint16_t rssi; // FIXME dependency on mw.c
@@ -104,6 +104,7 @@ static const uint8_t mavRates[] = { // we need to modify this or hardcode it in 
 
 static uint8_t mavTicks[MAXSTREAMS];
 static mavlink_message_t mavMsg;
+static mavlink_message_min_t mavMsg_min;
 static uint8_t mavBuffer[MAVLINK_MAX_PACKET_LEN];
 static uint32_t lastMavlinkMessage = 0;
 
@@ -296,7 +297,7 @@ void mavlinkSendrawIMU(void)
 
     // uint16_t test2 = acc.sampleRateHz;
     float* test3 = acc.accADC;
-    int16_t xacc = (int16_t) test3[0];
+    int16_t xacc = (int16_t) 123;
     int16_t yacc = (int16_t) test3[1];
     int16_t zacc = (int16_t) test3[2];
 
@@ -304,7 +305,7 @@ void mavlinkSendrawIMU(void)
     int16_t ygyro = xacc;
     int16_t zgyro = xacc;
     
-    mavlink_msg_raw_imu_pack2(0, 200, &mavMsg, 12345,
+    mavlink_msg_raw_imu_pack2(&mavMsg_min, 12345,
         // onboard_control_sensors_present Bitmask showing which onboard controllers and sensors are present.
         //Value of 0: not present. Value of 1: present. Indices: 0: 3D gyro, 1: 3D acc, 2: 3D mag, 3: absolute pressure,
         // 4: differential pressure, 5: GPS, 6: optical flow, 7: computer vision position, 8: laser based position,
@@ -313,7 +314,8 @@ void mavlinkSendrawIMU(void)
         xacc, yacc, zacc,
         // onboard_control_sensors_enabled Bitmask showing which onboard controllers and sensors are enabled
         xgyro, ygyro, zgyro);//, xgyro, ygyro, zgyro);
-    msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
+    // msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg_min);
+    msgLength = mavlink_msg_to_send_buffer2(mavBuffer, &mavMsg_min);
     mavlinkSerialWrite(mavBuffer, msgLength);
 }
 

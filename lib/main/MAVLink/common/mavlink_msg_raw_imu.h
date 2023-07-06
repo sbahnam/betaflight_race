@@ -133,7 +133,7 @@ static inline uint16_t mavlink_msg_raw_imu_pack(uint8_t system_id, uint8_t compo
  * @param zmag Z Magnetic field (raw)
  * @return length of the message in bytes (excluding serial stream start sign)
  */
-static inline uint16_t mavlink_msg_raw_imu_pack2(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
+static inline uint16_t mavlink_msg_raw_imu_pack2(mavlink_message_min_t* msg,
 						       uint16_t time_usec, int16_t xacc, int16_t yacc, int16_t zacc, int16_t xgyro, int16_t ygyro, int16_t zgyro)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
@@ -163,9 +163,10 @@ static inline uint16_t mavlink_msg_raw_imu_pack2(uint8_t system_id, uint8_t comp
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), &packet, MAVLINK_MSG_ID_RAW_IMU_LEN2);
 #endif
 
-	msg->msgid = MAVLINK_MSG_ID_RAW_IMU;
+	// msg->msgid = MAVLINK_MSG_ID_RAW_IMU;
 #if MAVLINK_CRC_EXTRA
-    return mavlink_finalize_message(msg, system_id, component_id, MAVLINK_MSG_ID_RAW_IMU_LEN2, MAVLINK_MSG_ID_RAW_IMU_CRC);
+    // return mavlink_finalize_message(msg, system_id, component_id, MAVLINK_MSG_ID_RAW_IMU_LEN2, MAVLINK_MSG_ID_RAW_IMU_CRC);
+    return mavlink_finalize_message2(msg, MAVLINK_MSG_ID_RAW_IMU_CRC);
 #else
     return mavlink_finalize_message(msg, system_id, component_id, MAVLINK_MSG_ID_RAW_IMU_LEN2);
 #endif
