@@ -123,20 +123,6 @@ typedef struct __mavlink_message {
 	uint64_t payload64[(MAVLINK_MAX_PAYLOAD_LEN+MAVLINK_NUM_CHECKSUM_BYTES+7)/8];
 }) mavlink_message_t;
 
-
-MAVPACKED( //@stavrow
-typedef struct __mavlink_message_min {
-	uint16_t checksum; ///< sent at end of packet
-	uint8_t magic;   ///< protocol magic marker
-	// uint8_t len;     ///< Length of payload
-	uint8_t seq;     ///< Sequence of packet
-	// uint8_t sysid;   ///< ID of message sender system/aircraft
-	// uint8_t compid;  ///< ID of the message sender component
-	// uint8_t msgid;   ///< ID of message in payload
-	uint64_t payload64[(MAVLINK_MAX_PAYLOAD_LEN+MAVLINK_NUM_CHECKSUM_BYTES+7)/8];
-}) mavlink_message_min_t;
-
-
 MAVPACKED(
 typedef struct __mavlink_extended_message {
        mavlink_message_t base_msg;
@@ -180,15 +166,9 @@ typedef struct __mavlink_message_info {
 #define _MAV_PAYLOAD(msg) ((const char *)(&((msg)->payload64[0])))
 #define _MAV_PAYLOAD_NON_CONST(msg) ((char *)(&((msg)->payload64[0])))
 
-// // checksum is immediately after the payload bytes
-// #define mavlink_ck_a(msg) *((msg)->len + (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
-// #define mavlink_ck_b(msg) *(((msg)->len+(uint16_t)1) + (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
-
 // checksum is immediately after the payload bytes
-#define mavlink_ck_a(msg) *(14+ (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
-#define mavlink_ck_b(msg) *((14+(uint16_t)1) + (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
-
-
+#define mavlink_ck_a(msg) *((msg)->len + (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
+#define mavlink_ck_b(msg) *(((msg)->len+(uint16_t)1) + (uint8_t *)_MAV_PAYLOAD_NON_CONST(msg))
 
 typedef enum {
     MAVLINK_COMM_0,

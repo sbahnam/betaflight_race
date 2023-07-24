@@ -226,7 +226,7 @@ void telemetryProcess(uint32_t currentTime)
     handleJetiExBusTelemetry();
 #endif
 #ifdef USE_TELEMETRY_MAVLINK
-    handleMAVLinkTelemetry(); //if we compile mavlink telemetry we compile this handler
+    handleMAVLinkTelemetry();
 #endif
 #ifdef USE_TELEMETRY_CRSF
     handleCrsfTelemetry(currentTime);

@@ -80,7 +80,7 @@
 #pragma GCC diagnostic pop
 
 #define TELEMETRY_MAVLINK_INITIAL_PORT_MODE MODE_TX
-#define TELEMETRY_MAVLINK_MAXRATE 100
+#define TELEMETRY_MAVLINK_MAXRATE 50
 #define TELEMETRY_MAVLINK_DELAY ((1000 * 1000) / TELEMETRY_MAVLINK_MAXRATE)
 
 extern uint16_t rssi; // FIXME dependency on mw.c
@@ -92,7 +92,7 @@ static bool mavlinkTelemetryEnabled =  false;
 static portSharing_e mavlinkPortSharing;
 
 /* MAVLink datastream rates in Hz */
-static const uint8_t mavRates[] = { // we need to modify this or hardcode it in mavlinkStreamTrigger
+static const uint8_t mavRates[] = {
     [MAV_DATA_STREAM_EXTENDED_STATUS] = 2, //2Hz
     [MAV_DATA_STREAM_RC_CHANNELS] = 5, //5Hz
     [MAV_DATA_STREAM_POSITION] = 2, //2Hz
@@ -104,13 +104,12 @@ static const uint8_t mavRates[] = { // we need to modify this or hardcode it in 
 
 static uint8_t mavTicks[MAXSTREAMS];
 static mavlink_message_t mavMsg;
-static mavlink_message_min_t mavMsg_min;
 static uint8_t mavBuffer[MAVLINK_MAX_PACKET_LEN];
 static uint32_t lastMavlinkMessage = 0;
 
-static int mavlinkStreamTrigger(enum MAV_DATA_STREAM streamNum) // in our case, we need to run our mavrate at mavlink maxrate I guess.
+static int mavlinkStreamTrigger(enum MAV_DATA_STREAM streamNum)
 {
-    uint16_t rate = (uint8_t) mavRates[streamNum];
+    uint8_t rate = (uint8_t) mavRates[streamNum];
     if (rate == 0) {
         return 0;
     }
@@ -267,59 +266,6 @@ void mavlinkSendSystemStatus(void)
     msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
     mavlinkSerialWrite(mavBuffer, msgLength);
 }
-
-
-
-
-void mavlinkSendrawIMU(void)
-{
-    uint16_t msgLength;
-
-/**
- * 
- * @brief Pack a raw_imu message
- * @param system_id ID of this system
- * @param component_id ID of this component (e.g. 200 for IMU)
- * @param msg The MAVLink message to compress the data into
- *
- * @param time_usec Timestamp (microseconds since UNIX epoch or microseconds since system boot)
- * @param xacc X acceleration (raw)
- * @param yacc Y acceleration (raw)
- * @param zacc Z acceleration (raw)
- * @param xgyro Angular speed around X axis (raw)
- * @param ygyro Angular speed around Y axis (raw)
- * @param zgyro Angular speed around Z axis (raw)
-
- * @return length of the message in bytes (excluding serial stream start sign)
- */
-// static inline uint16_t mavlink_msg_raw_imu_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
-// 						       uint64_t time_usec, int16_t xacc, int16_t yacc, int16_t zacc, int16_t xgyro, int16_t ygyro, int16_t zgyro, int16_t xmag, int16_t ymag, int16_t zmag)
-
-    // uint16_t test2 = acc.sampleRateHz;
-    float* test3 = acc.accADC;
-    int16_t xacc = (int16_t) 123;
-    int16_t yacc = (int16_t) test3[1];
-    int16_t zacc = (int16_t) test3[2];
-
-    int16_t xgyro = xacc;
-    int16_t ygyro = xacc;
-    int16_t zgyro = xacc;
-    
-    mavlink_msg_raw_imu_pack2(&mavMsg_min, 12345,
-        // onboard_control_sensors_present Bitmask showing which onboard controllers and sensors are present.
-        //Value of 0: not present. Value of 1: present. Indices: 0: 3D gyro, 1: 3D acc, 2: 3D mag, 3: absolute pressure,
-        // 4: differential pressure, 5: GPS, 6: optical flow, 7: computer vision position, 8: laser based position,
-        // 9: external ground-truth (Vicon or Leica). Controllers: 10: 3D angular rate control 11: attitude stabilization,
-        // 12: yaw position, 13: z/altitude control, 14: x/y position control, 15: motor outputs / control
-        xacc, yacc, zacc,
-        // onboard_control_sensors_enabled Bitmask showing which onboard controllers and sensors are enabled
-        xgyro, ygyro, zgyro);//, xgyro, ygyro, zgyro);
-    // msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg_min);
-    msgLength = mavlink_msg_to_send_buffer2(mavBuffer, &mavMsg_min);
-    mavlinkSerialWrite(mavBuffer, msgLength);
-}
-
-
 
 void mavlinkSendRCChannelsAndRSSI(void)
 {
@@ -566,12 +512,6 @@ void mavlinkSendHUDAndHeartbeat(void)
 
 void processMAVLinkTelemetry(void)
 {
-    // mavlinkSendSystemStatus();
-    // mavlinkSendTest();
-    if (false)
-    {
-    // printf("test\n");
-
     // is executed @ TELEMETRY_MAVLINK_MAXRATE rate
     if (mavlinkStreamTrigger(MAV_DATA_STREAM_EXTENDED_STATUS)) {
         mavlinkSendSystemStatus();
@@ -591,24 +531,24 @@ void processMAVLinkTelemetry(void)
         mavlinkSendAttitude();
     }
 
-
+    if (mavlinkStreamTrigger(MAV_DATA_STREAM_EXTRA2)) {
+        mavlinkSendHUDAndHeartbeat();
     }
-    mavlinkSendrawIMU();
 }
 
 void handleMAVLinkTelemetry(void)
 {
-    if (!mavlinkTelemetryEnabled) { // check if any port sends mavlink telemetry (in the configurator) 
+    if (!mavlinkTelemetryEnabled) {
         return;
     }
 
-    if (!mavlinkPort) { // check if it is the correct port
+    if (!mavlinkPort) {
         return;
     }
 
     uint32_t now = micros();
-    if ((now - lastMavlinkMessage) >= TELEMETRY_MAVLINK_DELAY) { // TELEMETRY_MAVLINK_DELAY is ((1000 * 1000) micro seconds / TELEMETRY_MAVLINK_MAXRATE), we shoudl change the TELEMETRY_MAVLINK_MAXRATE
-        processMAVLinkTelemetry(); // process the mavlink telemetry
+    if ((now - lastMavlinkMessage) >= TELEMETRY_MAVLINK_DELAY) {
+        processMAVLinkTelemetry();
         lastMavlinkMessage = now;
     }
 }

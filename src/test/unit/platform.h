@@ -36,7 +36,7 @@
 #define CONTROL_RATE_PROFILE_COUNT  4
 #define USE_MAG
 #define USE_BARO
-// #define USE_GPS
+#define USE_GPS
 #define USE_DASHBOARD
 #define USE_TELEMETRY
 #define USE_LED_STRIP
@@ -44,7 +44,7 @@
 #define USE_TRANSPONDER
 
 #ifndef LED_MAX_STRIP_LENGTH
-    #ifdef USE_LEDSTRIP_64
+    #ifdef USE_LED_STRIP_64
         #define LED_MAX_STRIP_LENGTH           64
     #else
         #define LED_MAX_STRIP_LENGTH           32

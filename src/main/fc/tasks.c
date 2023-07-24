@@ -320,7 +320,7 @@ static void taskTelemetry(timeUs_t currentTimeUs)
     if (!cliMode && featureIsEnabled(FEATURE_TELEMETRY)) {
         subTaskTelemetryPollSensors(currentTimeUs);
 
-        telemetryProcess(currentTimeUs); //this runs the actual process and check which are on
+        telemetryProcess(currentTimeUs);
     }
 }
 #endif
@@ -410,8 +410,8 @@ task_attribute_t task_attributes[TASK_COUNT] = {
     [TASK_OSD] = DEFINE_TASK("OSD", NULL, osdUpdateCheck, osdUpdate, TASK_PERIOD_HZ(OSD_FRAMERATE_DEFAULT_HZ), TASK_PRIORITY_LOW),
 #endif
 
-#ifdef USE_TELEMETRY // Here we define that we want to use telemetry by creating taskTelemetry
-    [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(500), TASK_PRIORITY_LOW), //@stavrow task_period
+#ifdef USE_TELEMETRY
+    [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(250), TASK_PRIORITY_LOW),
 #endif
 
 #ifdef USE_LED_STRIP
