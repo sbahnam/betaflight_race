@@ -100,6 +100,30 @@ MAVLINK_HELPER uint16_t mavlink_finalize_message_chan(mavlink_message_t* msg, ui
 	return length + MAVLINK_NUM_NON_PAYLOAD_BYTES;
 }
 
+#if MAVLINK_CRC_EXTRA
+MAVLINK_HELPER uint16_t mavlink_finalize_message_chan2(mavlink_message_min_t* msg, uint8_t chan, uint8_t crc_extra)
+#else
+MAVLINK_HELPER uint16_t mavlink_finalize_message_chan2(mavlink_message_min_t* msg)
+#endif
+{
+	uint8_t length = 26;
+	msg->magic = MAVLINK_STX;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+#pragma GCC diagnostic pop
+
+#if MAVLINK_CRC_EXTRA
+// msg->checksum is actually aligned
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+	crc_accumulate(crc_extra, &msg->checksum);
+#pragma GCC diagnostic pop
+#endif
+
+	return length + 1;
+}
+
 
 /**
  * @brief Finalize a MAVLink message with MAVLINK_COMM_0 as default channel
@@ -115,6 +139,10 @@ MAVLINK_HELPER uint16_t mavlink_finalize_message(mavlink_message_t* msg, uint8_t
 						 uint8_t length)
 {
 	return mavlink_finalize_message_chan(msg, system_id, component_id, MAVLINK_COMM_0, length);
+}
+MAVLINK_HELPER uint16_t mavlink_finalize_message2(mavlink_message_min_t* msg)
+{
+	return mavlink_finalize_message_chan2(msg);
 }
 #endif
 
@@ -191,6 +219,20 @@ MAVLINK_HELPER uint16_t mavlink_msg_to_send_buffer(uint8_t *buffer, const mavlin
 
 	return MAVLINK_NUM_NON_PAYLOAD_BYTES + (uint16_t)msg->len;
 }
+
+
+MAVLINK_HELPER uint16_t mavlink_msg_to_send_buffer2(uint8_t *buffer, const mavlink_message_min_t *msg)
+{
+	memcpy(buffer, (const uint8_t *)&msg->magic,  (uint16_t)27);
+
+	// uint8_t *ck = buffer + (MAVLINK_NUM_HEADER_BYTES - 4 + (uint16_t)26);
+
+	// ck[0] = (uint8_t)(msg->checksum & 0xFF);
+	// ck[1] = (uint8_t)(msg->checksum >> 8);
+
+	return (uint16_t)27;
+}
+
 
 union __mavlink_bitfield {
 	uint8_t uint8;

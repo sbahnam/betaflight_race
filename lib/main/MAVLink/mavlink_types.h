@@ -144,6 +144,12 @@ typedef enum {
 	MAVLINK_TYPE_DOUBLE   = 10
 } mavlink_message_type_t;
 
+MAVPACKED( //@stavrow
+typedef struct __mavlink_message_min {
+	uint8_t magic;   ///< protocol magic marker
+	uint64_t payload64[(MAVLINK_MAX_PAYLOAD_LEN+MAVLINK_NUM_CHECKSUM_BYTES+7)/8];
+}) mavlink_message_min_t;
+
 #define MAVLINK_MAX_FIELDS 64
 
 typedef struct __mavlink_field_info {
