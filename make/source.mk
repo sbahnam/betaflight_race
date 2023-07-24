@@ -192,6 +192,7 @@ COMMON_SRC = \
             telemetry/smartport.c \
             telemetry/ltm.c \
             telemetry/mavlink.c \
+            telemetry/pi.c \
             telemetry/msp_shared.c \
             telemetry/ibus.c \
             telemetry/ibus_shared.c \

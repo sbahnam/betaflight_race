@@ -35,5 +35,7 @@ obj
 obj/
 !obj.xml
 
+.vscode/
+
 
 
