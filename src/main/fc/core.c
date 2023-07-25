@@ -997,11 +997,11 @@ void processRxModes(timeUs_t currentTimeUs)
 #endif
 
     if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
-        LED1_ON;
+        //LED1_ON; // @tblaha this LED is used for debugging now.
         // increase frequency of attitude task to reduce drift when in angle or horizon mode
         rescheduleTask(TASK_ATTITUDE, TASK_PERIOD_HZ(acc.sampleRateHz / (float)imuConfig()->imu_process_denom));
     } else {
-        LED1_OFF;
+        //LED1_OFF;
         rescheduleTask(TASK_ATTITUDE, TASK_PERIOD_HZ(100));
     }
 

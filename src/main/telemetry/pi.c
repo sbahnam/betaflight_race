@@ -22,6 +22,7 @@
 #include "drivers/accgyro/accgyro.h"
 #include "drivers/sensor.h"
 #include "drivers/time.h"
+#include "drivers/light_led.h"
 
 #include "config/config.h"
 #include "fc/rc_controls.h"
@@ -134,11 +135,16 @@ void initPiTelemetry(void)
     piPortSharing = determinePortSharing(portConfig, FUNCTION_TELEMETRY_PI);
 }
 
+#define BLINK_ONCE delay(500); LED1_ON; delay(100); LED1_OFF; delay(100)
+
 void configurePiTelemetryPort(void)
 {
     if (!portConfig) {
         return;
     }
+
+    //delay(500);
+    //BLINK_ONCE;
 
     baudRate_e baudRateIndex = portConfig->telemetry_baudrateIndex;
     if (baudRateIndex == BAUD_AUTO) {
@@ -146,11 +152,17 @@ void configurePiTelemetryPort(void)
         baudRateIndex = BAUD_57600;
     }
 
+    //BLINK_ONCE;
+
     piPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_PI, NULL, NULL, baudRates[baudRateIndex], TELEMETRY_PI_INITIAL_PORT_MODE, telemetryConfig()->telemetry_inverted ? SERIAL_INVERTED : SERIAL_NOT_INVERTED);
+
+    //BLINK_ONCE;
 
     if (!piPort) {
         return;
     }
+
+    //BLINK_ONCE;
 
     piTelemetryEnabled = true;
 }
@@ -176,6 +188,16 @@ void checkPiTelemetryState(void)
     }
 }
 
+union {
+    struct {
+        char A;
+        char B;
+        char C;
+        char D;
+    } s;
+    float f;
+} test_cast;
+
 void piSendIMU(void)
 {
     pi_msg_IMU_pack(
@@ -188,7 +210,25 @@ void piSendIMU(void)
         acc.accADC[Y],
         acc.accADC[Z]
     );
-    //pi_msg_to_send_buffer(piBuffer, &piMsg);
+    // send dummy data to test serialization escaping
+    /*
+    test_cast.s.A = PI_STX_ESC;
+    test_cast.s.B = PI_ESC_ESC;
+    test_cast.s.C = PI_ESC;
+    test_cast.s.D = PI_STX;
+    pi_msg_IMU_pack(
+        &piMsg,
+        millis(),
+        //gyro.gyroADCf[FD_ROLL], // filtered with notches and lpf
+        test_cast.f,
+        gyro.gyroADCf[FD_PITCH],
+        gyro.gyroADCf[FD_YAW],
+        acc.accADC[X], // heavily filtered (25Hz?) because only used in the attitude loop, not gyro loop
+        acc.accADC[Y],
+        acc.accADC[Z]
+    );
+    */
+
     PI_MSG_TO_SEND_BUFFER(piBuffer, piMsg);
     piSerialWrite(piBuffer, piMsg.len); // set by pi_msg_IMU_pack
 }
