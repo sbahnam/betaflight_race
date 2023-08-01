@@ -1,0 +1,3 @@
+[submodule "lib/main/pi-protocol"]
+	path = lib/main/pi-protocol
+	url = git@github.com:tblaha/pi-protocol

@@ -196,6 +196,8 @@ COMMON_SRC = \
             telemetry/msp_shared.c \
             telemetry/ibus.c \
             telemetry/ibus_shared.c \
+            uplink/uplink.c \
+            uplink/pi.c \
             sensors/esc_sensor.c \
             io/vtx.c \
             io/vtx_rtc6705.c \
@@ -463,3 +465,5 @@ INCLUDE_DIRS += $(OLC_DIR)
 SRC += $(OLC_DIR)/olc.c
 SIZE_OPTIMISED_SRC += $(OLC_DIR)/olc.c
 endif
+
+# Do the same for the pi-protocol

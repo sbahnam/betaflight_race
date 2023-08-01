@@ -325,6 +325,13 @@ static void taskTelemetry(timeUs_t currentTimeUs)
 }
 #endif
 
+#ifdef USE_UPLINK
+static void taskUplink(timeUs_t currentTimeUs)
+{
+    uplinkProcess(currentTimeUs);
+}
+#endif
+
 #ifdef USE_CAMERA_CONTROL
 static void taskCameraControl(uint32_t currentTime)
 {
@@ -412,6 +419,10 @@ task_attribute_t task_attributes[TASK_COUNT] = {
 
 #ifdef USE_TELEMETRY
     [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(250), TASK_PRIORITY_LOW),
+#endif
+
+#ifdef USE_UPLINK
+    [TASK_UPLINK] = DEFINE_TASK("UPLINK", NULL, NULL, taskUplink, TASK_PERIOD_HZ(250), TASK_PRIORITY_MEDIUM),
 #endif
 
 #ifdef USE_LED_STRIP

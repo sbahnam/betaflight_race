@@ -137,6 +137,9 @@ typedef enum {
 #ifdef USE_TELEMETRY
     TASK_TELEMETRY,
 #endif
+#ifdef USE_UPLINK
+    TASK_UPLINK,
+#endif
 #ifdef USE_LED_STRIP
     TASK_LEDSTRIP,
 #endif
