@@ -20,7 +20,7 @@ DEFAULT_TARGET    ?= STM32F405
 TARGET    ?=
 
 # Compile-time options
-OPTIONS   ?= USE_UPLINK USE_UPLINK_PI
+OPTIONS   ?= #USE_UPLINK USE_UPLINK_PI
 
 # compile for External Storage Bootloader support
 EXST      ?= no
@@ -654,7 +654,7 @@ $(TARGET_EF_HASH_FILE):
 # pi-protocol make script
 generate_pi_protocol : 
 	@echo "generating pi protocol headers"
-	cd lib/main/pi/ && make generate CONFIG=config.yaml
+	cd lib/main/pi-protocol/ && make generate CONFIG=config.yaml
 	@echo "done"
 
 # rebuild everything when makefile changes or the extra flags have changed or pi-protocol has changed

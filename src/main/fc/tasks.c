@@ -317,11 +317,11 @@ void taskUpdateRangefinder(timeUs_t currentTimeUs)
 #ifdef USE_TELEMETRY
 static void taskTelemetry(timeUs_t currentTimeUs)
 {
-    if (!cliMode && featureIsEnabled(FEATURE_TELEMETRY)) {
-        subTaskTelemetryPollSensors(currentTimeUs);
+    //if (!cliMode && featureIsEnabled(FEATURE_TELEMETRY)) {
+    //    subTaskTelemetryPollSensors(currentTimeUs);
 
         telemetryProcess(currentTimeUs);
-    }
+    //}
 }
 #endif
 
@@ -418,7 +418,7 @@ task_attribute_t task_attributes[TASK_COUNT] = {
 #endif
 
 #ifdef USE_TELEMETRY
-    [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(250), TASK_PRIORITY_LOW),
+    [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(2000), TASK_PRIORITY_LOW),
 #endif
 
 #ifdef USE_UPLINK
@@ -570,6 +570,7 @@ void tasksInit(void)
 #ifdef USE_TELEMETRY
     if (featureIsEnabled(FEATURE_TELEMETRY)) {
         setTaskEnabled(TASK_TELEMETRY, true);
+        /*
         if (rxRuntimeState.serialrxProvider == SERIALRX_JETIEXBUS) {
             // Reschedule telemetry to 500hz for Jeti Exbus
             rescheduleTask(TASK_TELEMETRY, TASK_PERIOD_HZ(500));
@@ -577,6 +578,7 @@ void tasksInit(void)
             // Reschedule telemetry to 500hz, 2ms for CRSF
             rescheduleTask(TASK_TELEMETRY, TASK_PERIOD_HZ(500));
         }
+        */
     }
 #endif
 

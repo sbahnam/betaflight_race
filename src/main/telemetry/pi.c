@@ -3,7 +3,6 @@
  */
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "platform.h"
 
@@ -50,6 +49,8 @@
 
 #include "telemetry/telemetry.h"
 #include "telemetry/pi.h"
+#include "pi-protocol.h"
+#include "pi-messages.h"
 
 #define TELEMETRY_PI_INITIAL_PORT_MODE MODE_TX
 #define TELEMETRY_PI_MAXRATE 50
@@ -76,9 +77,11 @@ static const uint8_t mavRates[] = {
 
 
 // static uint8_t mavTicks[MAXSTREAMS];
-static pi_message_t piMsg;
 static uint8_t piBuffer[PI_MAX_PACKET_LEN];
-static uint32_t lastPiMessage = 0;
+//static uint32_t lastPiMessage = 0;
+
+// wrapper for serialWrite
+static void serialWriter(uint8_t byte) { serialWrite(piPort, byte); }
 
 /*
 static int mavlinkStreamTrigger(enum MAV_DATA_STREAM streamNum)
@@ -103,24 +106,6 @@ static int mavlinkStreamTrigger(enum MAV_DATA_STREAM streamNum)
     return 0;
 }
 */
-
-static void piSerialWrite(uint8_t * buf, uint16_t length)
-{
-    serialWrite(piPort, PI_STX);
-    for (int i = 0; i < length; i++)
-        switch(buf[i]) {
-            case PI_STX:
-                serialWrite(piPort, PI_ESC);
-                serialWrite(piPort, PI_STX_ESC);
-                break;
-            case PI_ESC:
-                serialWrite(piPort, PI_ESC);
-                serialWrite(piPort, PI_ESC_ESC);
-                break;
-            default:
-                serialWrite(piPort, buf[i]);
-        }
-}
 
 void freePiTelemetryPort(void)
 {
@@ -149,7 +134,8 @@ void configurePiTelemetryPort(void)
     baudRate_e baudRateIndex = portConfig->telemetry_baudrateIndex;
     if (baudRateIndex == BAUD_AUTO) {
         // default rate for minimOSD
-        baudRateIndex = BAUD_57600;
+        //baudRateIndex = BAUD_500000;
+        baudRateIndex = BAUD_921600;
     }
 
     //BLINK_ONCE;
@@ -200,8 +186,8 @@ union {
 
 void piSendIMU(void)
 {
-    pi_msg_IMU_pack(
-        &piMsg,
+    int len = piMsgImuPack(
+        piBuffer,
         millis(),
         gyro.gyroADCf[FD_ROLL], // filtered with notches and lpf
         gyro.gyroADCf[FD_PITCH],
@@ -216,8 +202,8 @@ void piSendIMU(void)
     test_cast.s.B = PI_ESC_ESC;
     test_cast.s.C = PI_ESC;
     test_cast.s.D = PI_STX;
-    pi_msg_IMU_pack(
-        &piMsg,
+    int len = piMsgImuPack(
+        piBuffer,
         millis(),
         //gyro.gyroADCf[FD_ROLL], // filtered with notches and lpf
         test_cast.f,
@@ -229,8 +215,7 @@ void piSendIMU(void)
     );
     */
 
-    PI_MSG_TO_SEND_BUFFER(piBuffer, piMsg);
-    piSerialWrite(piBuffer, piMsg.len); // set by pi_msg_IMU_pack
+    piSerialWrite(&serialWriter, piBuffer, len); // set by pi_msg_IMU_pack
 }
 
 void processPiTelemetry(void)
@@ -249,11 +234,11 @@ void handlePiTelemetry(void)
         return;
     }
 
-    uint32_t now = micros();
-    if ((now - lastPiMessage) >= TELEMETRY_PI_DELAY) {
+    //uint32_t now = micros();
+    //if ((now - lastPiMessage) >= TELEMETRY_PI_DELAY) {
         processPiTelemetry();
-        lastPiMessage = now;
-    }
+    //    lastPiMessage = now;
+    //}
 }
 
 #endif

@@ -196,8 +196,6 @@ COMMON_SRC = \
             telemetry/msp_shared.c \
             telemetry/ibus.c \
             telemetry/ibus_shared.c \
-            uplink/uplink.c \
-            uplink/pi.c \
             sensors/esc_sensor.c \
             io/vtx.c \
             io/vtx_rtc6705.c \
@@ -206,6 +204,8 @@ COMMON_SRC = \
             io/vtx_control.c \
             io/vtx_msp.c \
             cms/cms_menu_vtx_msp.c
+            #uplink/uplink.c \
+            #uplink/pi.c \
 
 COMMON_DEVICE_SRC = \
             $(CMSIS_SRC) \
@@ -467,3 +467,9 @@ SIZE_OPTIMISED_SRC += $(OLC_DIR)/olc.c
 endif
 
 # Do the same for the pi-protocol
+PI_DIR = $(ROOT)/lib/main/pi-protocol
+
+ifneq ($(PI_DIR),)
+INCLUDE_DIRS += $(PI_DIR)
+# there are no sources, it's header-only
+endif
