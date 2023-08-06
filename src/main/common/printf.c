@@ -51,11 +51,11 @@ putcf stdout_putf;
 void *stdout_putp;
 
 // print bf, padded from left to at least n characters.
-// padding is zero ('0') if z!=0, space (' ') otherwise
+// pad by character z
 static int putchw(void *putp, putcf putf, int n, char z, char *bf)
 {
     int written = 0;
-    char fc = z ? '0' : ' ';
+    char fc = z ? z : ' ';
     char ch;
     char *p = bf;
     while (*p++ && n > 0)
@@ -72,7 +72,7 @@ static int putchw(void *putp, putcf putf, int n, char z, char *bf)
 // retrun number of bytes written
 int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
 {
-    char bf[12];
+    char bf[102];
     int written = 0;
     char ch;
 
@@ -84,11 +84,24 @@ int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
 #ifdef  REQUIRE_PRINTF_LONG_SUPPORT
             char lng = 0;
 #endif
+            int wd = 0;
             int w = 0;
             ch = *(fmt++);
-            if (ch == '0') {
+            if ((ch == '0') || (ch == '-')) {
+                lz = ch;
                 ch = *(fmt++);
-                lz = 1;
+            }
+            unsigned int i = 0;
+            while (i++ < 2) {
+                if (ch >= '0' && ch <= '9') {
+                    ch = a2i(ch, &fmt, 10, &wd);
+                    w = wd;
+                    for (unsigned int j = 1; j < i; j++)
+                        w *= 10;
+                }
+            }
+            if (ch >= '0' && ch <= '9') {
+                ch = a2i(ch, &fmt, 10, &w);
             }
             if (ch >= '0' && ch <= '9') {
                 ch = a2i(ch, &fmt, 10, &w);
@@ -115,7 +128,7 @@ int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
             case 'd':{
 #ifdef  REQUIRE_PRINTF_LONG_SUPPORT
                     if (lng)
-                        li2a(va_arg(va, unsigned long int), bf);
+                        li2a(va_arg(va, long int), bf);
                     else
 #endif
                         i2a(va_arg(va, int), bf);
@@ -143,6 +156,10 @@ int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
                 break;
             case 'n':
                 *va_arg(va, int*) = written;
+                break;
+            case 'f':
+                f2a(va_arg(va, double), 10, bf);
+                written += putchw(putp, putf, w, lz, bf);
                 break;
             default:
                 break;

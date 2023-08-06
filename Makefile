@@ -20,7 +20,7 @@ DEFAULT_TARGET    ?= STM32F405
 TARGET    ?=
 
 # Compile-time options
-OPTIONS   ?= #USE_UPLINK USE_UPLINK_PI
+OPTIONS   ?=
 
 # compile for External Storage Bootloader support
 EXST      ?= no

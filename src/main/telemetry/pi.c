@@ -52,7 +52,7 @@
 #include "pi-protocol.h"
 #include "pi-messages.h"
 
-#define TELEMETRY_PI_INITIAL_PORT_MODE MODE_TX
+#define TELEMETRY_PI_INITIAL_PORT_MODE MODE_RXTX
 #define TELEMETRY_PI_MAXRATE 50
 #define TELEMETRY_PI_DELAY ((1000 * 1000) / TELEMETRY_PI_MAXRATE)
 
@@ -140,7 +140,7 @@ void configurePiTelemetryPort(void)
 
     //BLINK_ONCE;
 
-    piPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_PI, NULL, NULL, baudRates[baudRateIndex], TELEMETRY_PI_INITIAL_PORT_MODE, telemetryConfig()->telemetry_inverted ? SERIAL_INVERTED : SERIAL_NOT_INVERTED);
+    piPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_PI, NULL, NULL, baudRates[baudRateIndex], TELEMETRY_PI_INITIAL_PORT_MODE, SERIAL_NOT_INVERTED);
 
     //BLINK_ONCE;
 
@@ -224,6 +224,15 @@ void processPiTelemetry(void)
     piSendIMU();
 }
 
+void processPiUplink(void)
+{
+    if (piPort) {
+        while (serialRxBytesWaiting(piPort)) {
+            piParse(serialRead(piPort));
+        }
+    }
+}
+
 void handlePiTelemetry(void)
 {
     if (!piTelemetryEnabled) {
@@ -237,6 +246,7 @@ void handlePiTelemetry(void)
     //uint32_t now = micros();
     //if ((now - lastPiMessage) >= TELEMETRY_PI_DELAY) {
         processPiTelemetry();
+        processPiUplink();
     //    lastPiMessage = now;
     //}
 }
