@@ -52,6 +52,9 @@
 #include "pi-protocol.h"
 #include "pi-messages.h"
 
+#define USE_CLI_DEBUG_PRINT
+#include "cli/cli_debug_print.h"
+
 #define TELEMETRY_PI_INITIAL_PORT_MODE MODE_RXTX
 #define TELEMETRY_PI_MAXRATE 50
 #define TELEMETRY_PI_DELAY ((1000 * 1000) / TELEMETRY_PI_MAXRATE)
@@ -77,7 +80,7 @@ static const uint8_t mavRates[] = {
 
 
 // static uint8_t mavTicks[MAXSTREAMS];
-static uint8_t piBuffer[PI_MAX_PACKET_LEN];
+//static uint8_t piBuffer[PI_MAX_PACKET_LEN];
 //static uint32_t lastPiMessage = 0;
 
 // wrapper for serialWrite
@@ -174,28 +177,17 @@ void checkPiTelemetryState(void)
     }
 }
 
-union {
-    struct {
-        char A;
-        char B;
-        char C;
-        char D;
-    } s;
-    float f;
-} test_cast;
-
 void piSendIMU(void)
 {
-    int len = piMsgImuPack(
-        piBuffer,
-        millis(),
-        gyro.gyroADCf[FD_ROLL], // filtered with notches and lpf
-        gyro.gyroADCf[FD_PITCH],
-        gyro.gyroADCf[FD_YAW],
-        acc.accADC[X], // heavily filtered (25Hz?) because only used in the attitude loop, not gyro loop
-        acc.accADC[Y],
-        acc.accADC[Z]
-    );
+    piMsgImuTx.time_ms = millis();
+    piMsgImuTx.roll = gyro.gyroADCf[FD_ROLL]; // filtered with notches and lpf
+    piMsgImuTx.pitch = gyro.gyroADCf[FD_PITCH]; // filtered with notches and lpf
+    piMsgImuTx.yaw = gyro.gyroADCf[FD_YAW]; // filtered with notches and lpf
+    piMsgImuTx.x = acc.accADC[X];
+    piMsgImuTx.y = acc.accADC[Y];
+    piMsgImuTx.z = acc.accADC[Z];
+    piSendMsg(&piMsgImuTx, &serialWriter);
+
     // send dummy data to test serialization escaping
     /*
     test_cast.s.A = PI_STX_ESC;
@@ -214,8 +206,6 @@ void piSendIMU(void)
         acc.accADC[Z]
     );
     */
-
-    piSerialWrite(&serialWriter, piBuffer, len); // set by pi_msg_IMU_pack
 }
 
 void processPiTelemetry(void)
@@ -226,6 +216,14 @@ void processPiTelemetry(void)
 
 void processPiUplink(void)
 {
+#ifdef PI_BETAFLIGHT_DEBUG
+    static unsigned int i = 0;
+    if (++i > 3) {
+        i = 0;
+        LED1_TOGGLE;
+        cliPrintLinef("%10d", piStats[PI_PARSE_INVOKE]);
+    }
+#endif
     if (piPort) {
         while (serialRxBytesWaiting(piPort)) {
             piParse(serialRead(piPort));

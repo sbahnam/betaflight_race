@@ -94,17 +94,10 @@ int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
             unsigned int i = 0;
             while (i++ < 2) {
                 if (ch >= '0' && ch <= '9') {
+                    w *= 10;
                     ch = a2i(ch, &fmt, 10, &wd);
-                    w = wd;
-                    for (unsigned int j = 1; j < i; j++)
-                        w *= 10;
+                    w += wd;
                 }
-            }
-            if (ch >= '0' && ch <= '9') {
-                ch = a2i(ch, &fmt, 10, &w);
-            }
-            if (ch >= '0' && ch <= '9') {
-                ch = a2i(ch, &fmt, 10, &w);
             }
 #ifdef  REQUIRE_PRINTF_LONG_SUPPORT
             if (ch == 'l') {
@@ -149,7 +142,7 @@ int tfp_format(void *putp, putcf putf, const char *fmt, va_list va)
                 putf(putp, (char) (va_arg(va, int))); written++;
                 break;
             case 's':
-                written += putchw(putp, putf, w, 0, va_arg(va, char *));
+                written += putchw(putp, putf, w, lz, va_arg(va, char *));
                 break;
             case '%':
                 putf(putp, ch); written++;

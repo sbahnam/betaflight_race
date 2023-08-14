@@ -6041,7 +6041,6 @@ static void cliUplink(const char *cmdName, char *cmdline)
     } else if (strcasecmp(cmdline, "msgs") == 0) {
 #ifdef PI_USE_PRINT_MSGS
         piPrintMsgs(&cliPrintLinefi);
-        //cliPrintfi("%f, %f, %f, %f", 1234.4321L, 0.0005678L, 1.1234L, 0.1234L);
 #endif
     } else {
         cliShowParseError(cmdName);

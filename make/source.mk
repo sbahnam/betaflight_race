@@ -467,9 +467,12 @@ SIZE_OPTIMISED_SRC += $(OLC_DIR)/olc.c
 endif
 
 # Do the same for the pi-protocol
-PI_DIR = $(ROOT)/lib/main/pi-protocol
+PI_DIR = $(ROOT)/lib/main/pi-protocol/src
 
 ifneq ($(PI_DIR),)
 INCLUDE_DIRS += $(PI_DIR)
-# there are no sources, it's header-only
+SRC += $(PI_DIR)/pi-protocol.c
+SRC += $(PI_DIR)/pi-messages.c
+#SIZE_OPTIMISED_SRC += $(PI_DIR)/pi-protocol.c
+#SIZE_OPTIMISED_SRC += $(PI_DIR)/pi-messages.c
 endif
