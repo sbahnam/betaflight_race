@@ -23,12 +23,24 @@ EXTRA_FLAGS=-D'BUILD_KEY=4880cd41e59e44642e41c3f6344b3993' -D'RELEASE_NAME=4.4.2
 
 ## Flashing and Debugging over pi
 
-See REAMDME's of https://github.com/tblaha/pi-kompaan.
+For context, see REAMDME's of https://github.com/tblaha/pi-kompaan.
 
 Furthermore, install:
 ```shell
 apt install gdb-multiarch binutils-multiarch sshpass
 ```
+
+If connected to the pi-kompaan raspberry via wifi (such that it has ip 10.0.0.1, user pi and password pi), the following can be used to flash:
+```bash
+make remote_flash
+# make DEBUG=GDB remote_flash  # to compile with symbols and without optimisations
+```
+
+To debug within VScode, just hit `CTRL+SHIFT+D`, hit play and be a little bit patient (15sec or so? Then youll be taken to the start of `main()`).
+
+DO NOT CLICK ON `Global` variables, this froze and crashed by VScode.
+
+You can reset and execution of betaflight by typing `monitor reset` in the `DEBUG CONSOLE`.
 
 
 ## Events

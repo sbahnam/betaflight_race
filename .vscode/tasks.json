@@ -4,6 +4,11 @@
         "label": "start-openocd",
         "command": "/usr/bin/sshpass",
         "args": ["-p", "pi", "ssh", "pi@10.0.0.1", "sudo", "systemctl", "start", "openocd.service"],
-        "type": "shell"
+        "type": "shell",
+        "presentation": {
+            "reveal": "silent",
+            "revealProblems": "onProblem",
+            "close": true
+        }
     }]
 }
