@@ -229,6 +229,20 @@ void processPiUplink(void)
             piParse(serialRead(piPort));
         }
     }
+    // todo: throttle this somehow
+    if (piMsgFakeGpsRx) {
+        gpsSol.llh.lat = piMsgFakeGpsRx->lat;
+        gpsSol.llh.lon = piMsgFakeGpsRx->lon;
+        gpsSol.llh.altCm = piMsgFakeGpsRx->altCm;
+        gpsSol.dop.hdop = piMsgFakeGpsRx->hdop;
+        gpsSol.groundSpeed = piMsgFakeGpsRx->groundSpeed;
+        gpsSol.groundCourse = piMsgFakeGpsRx->groundCourse;
+        gpsSol.numSat = piMsgFakeGpsRx->numSat;
+        // let the configurator know that we have a good GPS, and a good fix
+        sensorsSet(SENSOR_GPS);
+        ENABLE_STATE(GPS_FIX);
+        ENABLE_STATE(GPS_FIX_EVER);
+    }
 }
 
 void handlePiTelemetry(void)

@@ -1,0 +1,24 @@
+{
+    "files.associations": {
+        "accgyro.h": "c",
+        "gyro.h": "c",
+        "telemetry.h": "c",
+        "pi.h": "c",
+        "bit": "c",
+        "compare": "c",
+        "cstddef": "c",
+        "forward_list": "c",
+        "list": "c",
+        "string": "c",
+        "optional": "c",
+        "limits": "c",
+        "memory": "c",
+        "new": "c",
+        "functional": "c",
+        "ranges": "c",
+        "cstdio": "c",
+        "typeconversion.h": "c"
+    },
+    "cortex-debug.variableUseNaturalFormat": false,
+    "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch"
+}

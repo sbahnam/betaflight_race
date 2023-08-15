@@ -35,6 +35,4 @@ obj
 obj/
 !obj.xml
 
-.vscode/
-
 make/local.mk

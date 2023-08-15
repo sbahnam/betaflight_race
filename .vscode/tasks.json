@@ -1,0 +1,9 @@
+{
+    "version": "2.0.0",
+    "tasks": [{
+        "label": "start-openocd",
+        "command": "/usr/bin/sshpass",
+        "args": ["-p", "pi", "ssh", "pi@10.0.0.1", "sudo", "systemctl", "start", "openocd.service"],
+        "type": "shell"
+    }]
+}
