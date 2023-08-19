@@ -66,6 +66,7 @@ COMMON_SRC = \
             io/transponder_ir.c \
             io/usb_cdc_hid.c \
             io/usb_msc.c \
+            io/external_pos.c \
             msp/msp.c \
             msp/msp_box.c \
             msp/msp_serial.c \
@@ -268,6 +269,7 @@ SPEED_OPTIMISED_SRC := $(SPEED_OPTIMISED_SRC) \
             flight/mixer.c \
             flight/pid.c \
             flight/rpm_filter.c \
+			io/external_pos.c \
             rx/ibus.c \
             rx/rx.c \
             rx/rx_spi.c \

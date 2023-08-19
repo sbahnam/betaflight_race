@@ -102,6 +102,23 @@ typedef struct fp_rotationMatrix_s {
     float m[3][3];              // matrix
 } fp_rotationMatrix_t;
 
+typedef struct fp_quaternion {
+    float qi;
+    float qx;
+    float qy;
+    float qz;
+} fp_quaternion_t;
+
+// no quaternion union, because of the different conventions
+
+/**
+ * @brief euler rotation 'ZYX'. Taken from paparazzi!
+ *
+ * @param e Euler output
+ * @param q Quat input
+ */
+void float_eulers_of_quat(fp_angles_t *e, fp_quaternion_t *q);
+
 int gcd(int num, int denom);
 int32_t applyDeadband(int32_t value, int32_t deadband);
 float fapplyDeadband(float value, float deadband);

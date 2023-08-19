@@ -17,7 +17,8 @@
         "functional": "c",
         "ranges": "c",
         "cstdio": "c",
-        "typeconversion.h": "c"
+        "typeconversion.h": "c",
+        "gps.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": false,
     "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch"

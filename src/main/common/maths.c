@@ -107,6 +107,32 @@ float acos_approx(float x)
 }
 #endif
 
+void float_eulers_of_quat(eulers_t *e, quat_t *q)
+{
+  // lis
+  const float qx2  = q->qx * q->qx;
+  const float qy2  = q->qy * q->qy;
+  const float qz2  = q->qz * q->qz;
+  const float qiqx = q->qi * q->qx;
+  const float qiqy = q->qi * q->qy;
+  const float qiqz = q->qi * q->qz;
+  const float qxqy = q->qx * q->qy;
+  const float qxqz = q->qx * q->qz;
+  const float qyqz = q->qy * q->qz;
+  const float dcm00 = 1.0 - 2.*(qy2 +  qz2);
+  const float dcm01 =       2.*(qxqy + qiqz);
+  float dcm02       =       2.*(qxqz - qiqy);
+  const float dcm12 =       2.*(qyqz + qiqx);
+  const float dcm22 = 1.0 - 2.*(qx2 +  qy2);
+
+  // asinf does not exist outside [-1,1]
+  dcm02 = constrainf(dcm02, -1.0f, +1.0f);
+
+  e->angles.roll = atan2f(dcm12, dcm22);
+  e->angles.pitch = -asinf(dcm02);
+  e->angles.yaw = atan2f(dcm01, dcm00);
+}
+
 int gcd(int num, int denom)
 {
     if (denom == 0) {
