@@ -1,7 +1,7 @@
 
 #include "pi-messages.h"
 #include "external_pos.h"
-//#include "common/maths.h"
+#include "common/maths.h"
 #include "drivers/time.h"
 #include "common/time.h"
 

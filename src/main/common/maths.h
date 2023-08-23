@@ -21,6 +21,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <float.h>
 
 #ifndef sq
 #define sq(x) ((x)*(x))
@@ -85,6 +86,81 @@ typedef union u_fp_vector {
     t_fp_vector_def V;
 } t_fp_vector;
 
+// vector operation primitives
+
+// probably code bloat... convert to static functions?
+#define VEC3_SCALAR_MULT_ADD(_orig, _sc, _add) { \
+    _orig.V.X += _sc * _add.V.X; \
+    _orig.V.Y += _sc * _add.V.Y; \
+    _orig.V.Z += _sc * _add.V.Z; \
+}
+
+#define VEC3_ELEM_MULT_ADD(_orig, _gains, _add) { \
+    _orig.V.X += _gains.V.X * _add.V.X; \
+    _orig.V.Y += _gains.V.Y * _add.V.Y; \
+    _orig.V.Z += _gains.V.Z * _add.V.Z; \
+}
+
+#define VEC3_SCALAR_MULT(_orig, _sc) { \
+    _orig.V.X *= _sc; \
+    _orig.V.Y *= _sc; \
+    _orig.V.Z *= _sc; \
+}
+
+#define VEC3_LENGTH(_orig) \
+    sqrtf( \
+        _orig.V.X*_orig.V.X \
+        + _orig.V.Y*_orig.V.Y \
+        + _orig.V.Z*_orig.V.Z \
+    )
+
+#define VEC3_NORMALIZE(_orig) { \
+    float _sc = 1. / VEC3_LENGTH(_orig); \
+    VEC3_SCALAR_MULT(_orig, _sc); \
+}
+
+#define QUAT_SCALAR_MULT(_orig, _sc) { \
+    _orig.qi *= _sc; \
+    _orig.qx *= _sc; \
+    _orig.qy *= _sc; \
+    _orig.qz *= _sc; \
+}
+
+#define QUAT_LENGTH(_orig) \
+    sqrtf( \
+        _orig.qi*_orig.qi \
+        + _orig.qx*_orig.qx \
+        + _orig.qy*_orig.qy \
+        + _orig.qz*_orig.qz \
+    )
+
+#define QUAT_NORMALIZE(_orig) { \
+    float _sc = 1. / QUAT_LENGTH(_orig); \
+    QUAT_SCALAR_MULT(_orig, _sc); \
+}
+
+// think of using hypot
+#define VEC3_XY_LENGTH(_orig) \
+    sqrtf( \
+        _orig.V.X*_orig.V.X \
+        + _orig.V.Y*_orig.V.Y \
+    )
+
+#define VEC3_CONSTRAIN_XY_LENGTH(_vec, _max_length) { \
+    _vec.V.X /= constrainf(VEC3_XY_LENGTH(_vec) / _max_length, 1., +FLT_MAX); \
+    _vec.V.Y /= constrainf(VEC3_XY_LENGTH(_vec) / _max_length, 1., +FLT_MAX); \
+}
+
+#define VEC3_DOT(_a, _b) ( \
+    _a.V.X*_b.V.X  +  _a.V.Y*_b.V.Y +  _a.V.Z*_b.V.Z \
+)
+
+#define VEC3_CROSS(_c, _a, _b) { \
+    _c.V.X = _a.V.Y * _b.V.Z   -   _a.V.Z * _b.V.Y; \
+    _c.V.Y = _a.V.Z * _b.V.X   -   _a.V.X * _b.V.Z; \
+    _c.V.Z = _a.V.X * _b.V.Y   -   _a.V.Y * _b.V.X; \
+}
+
 // Floating point Euler angles.
 // Be carefull, could be either of degrees or radians.
 typedef struct fp_angles {
@@ -118,6 +194,11 @@ typedef struct fp_quaternion {
  * @param q Quat input
  */
 void float_eulers_of_quat(fp_angles_t *e, fp_quaternion_t *q);
+
+// https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/arithmetic/index.htm
+fp_quaternion_t quatMult(fp_quaternion_t ql, fp_quaternion_t qr);
+t_fp_vector quatRotate(fp_quaternion_t q, t_fp_vector v);
+t_fp_vector quatRotMatCol(fp_quaternion_t q, uint8_t axis);
 
 int gcd(int num, int denom);
 int32_t applyDeadband(int32_t value, int32_t deadband);

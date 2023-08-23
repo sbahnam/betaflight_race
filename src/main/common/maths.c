@@ -107,7 +107,7 @@ float acos_approx(float x)
 }
 #endif
 
-void float_eulers_of_quat(eulers_t *e, quat_t *q)
+void float_eulers_of_quat(fp_angles_t *e, fp_quaternion_t *q)
 {
   // lis
   const float qx2  = q->qx * q->qx;
@@ -131,6 +131,54 @@ void float_eulers_of_quat(eulers_t *e, quat_t *q)
   e->angles.roll = atan2f(dcm12, dcm22);
   e->angles.pitch = -asinf(dcm02);
   e->angles.yaw = atan2f(dcm01, dcm00);
+}
+
+fp_quaternion_t quatMult(fp_quaternion_t ql, fp_quaternion_t qr) {
+    fp_quaternion_t res = {
+        .qi = ql.qi * qr.qi - ql.qx * qr.qx - ql.qy * qr.qy - ql.qz * qr.qz,
+        .qx = ql.qx * qr.qi + ql.qi * qr.qx + ql.qy * qr.qz - ql.qz * qr.qy,
+        .qy = ql.qi * qr.qy - ql.qx * qr.qz + ql.qy * qr.qi + ql.qz * qr.qx,
+        .qz = ql.qi * qr.qz + ql.qx * qr.qy - ql.qy * qr.qx + ql.qz * qr.qi
+    };
+    return res;
+}
+
+t_fp_vector quatRotate(fp_quaternion_t q, t_fp_vector v) {
+    // slow code that uses lots memory, use some library ffs
+    fp_quaternion_t qv = {.qx = v.V.X, .qy = v.V.Y, .qz = v.V.Z};
+    fp_quaternion_t q_qv = quatMult(q, qv);
+    fp_quaternion_t qi = q;
+    qi.qi *= -1;
+    fp_quaternion_t q_qv_qi = quatMult(q_qv, qi);
+    t_fp_vector res = {.V.X = q_qv_qi.qx, .V.Y = q_qv_qi.qy, .V.Z = q_qv_qi.qz};
+    return res;
+}
+
+t_fp_vector quatRotMatCol(fp_quaternion_t q, uint8_t axis) {
+    // basically q * v * qinv, where v = (0 1 0 0) or (0 0 1 0) or (0 0 0 1)
+    // https://danceswithcode.net/engineeringnotes/quaternions/quaternions.html
+    t_fp_vector res = {0};
+    switch(axis) {
+        case 0:
+            // X: v = (0 1 0 0)
+            res.V.X = 1 - 2*(q.qy*q.qy + q.qz*q.qz);
+            res.V.Y = 2*q.qx*q.qy + 2*q.qi*q.qz;
+            res.V.Z = 2*q.qx*q.qz - 2*q.qi*q.qy;
+            break;
+        case 1:
+            // Y: v = (0 0 1 0)
+            res.V.X = 2*q.qx*q.qy - 2*q.qi*q.qz;
+            res.V.Y = 1 - 2*(q.qx*q.qx + q.qz*q.qz);
+            res.V.Z = 2*q.qy*q.qz + 2*q.qi*q.qx;
+            break;
+        case 2:
+            // Z: v = (0 0 0 1)
+            res.V.X = 2*q.qx*q.qz + 2*q.qi*q.qy;
+            res.V.Z = 2*q.qy*q.qz - 2*q.qi*q.qx;
+            res.V.Z = 1 - 2*(q.qx*q.qx + q.qy*q.qy);
+            break;
+    }
+    return res;
 }
 
 int gcd(int num, int denom)

@@ -1,5 +1,6 @@
 
 #include "drivers/time.h"
+#include "common/maths.h"
 
 typedef enum {
     EXT_POS_NO_SIGNAL,
