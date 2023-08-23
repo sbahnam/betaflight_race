@@ -147,8 +147,9 @@ typedef union u_fp_vector {
     )
 
 #define VEC3_CONSTRAIN_XY_LENGTH(_vec, _max_length) { \
-    _vec.V.X /= constrainf(VEC3_XY_LENGTH(_vec) / _max_length, 1., +FLT_MAX); \
-    _vec.V.Y /= constrainf(VEC3_XY_LENGTH(_vec) / _max_length, 1., +FLT_MAX); \
+    float _vec_len = VEC3_XY_LENGTH(_vec); \
+    _vec.V.X /= constrainf(_vec_len / _max_length, 1., +FLT_MAX); \
+    _vec.V.Y /= constrainf(_vec_len / _max_length, 1., +FLT_MAX); \
 }
 
 #define VEC3_DOT(_a, _b) ( \

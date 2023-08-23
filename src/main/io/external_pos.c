@@ -49,7 +49,7 @@ void checkNewPos(void) {
     }
 }
 
-void getPos(timeUs_t current) {
+void getExternalPos(timeUs_t current) {
 
     UNUSED(current);
 
@@ -76,7 +76,7 @@ void getPos(timeUs_t current) {
     }
 
     // extrapolate position with speed info
-    timeDelta_t delta = cmpTimeUs(microsISR(), latestMsgTime);    
+    timeDelta_t delta = cmpTimeUs(microsISR(), latestMsgTime);
     if (delta > 0) {
         extPosNed.pos.V.X += ((float) delta * 1e-6) * extPosNed.vel.V.X;
         extPosNed.pos.V.Y += ((float) delta * 1e-6) * extPosNed.vel.V.Y;

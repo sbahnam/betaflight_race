@@ -20,6 +20,6 @@
         "typeconversion.h": "c",
         "gps.h": "c"
     },
-    "cortex-debug.variableUseNaturalFormat": false,
+    "cortex-debug.variableUseNaturalFormat": true,
     "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch"
 }

@@ -8,5 +8,6 @@ extern t_fp_vector posSpNed;
 extern t_fp_vector velSpNed;
 extern t_fp_vector accSpNed;
 
+void updatePosCtl(timeUs_t current);
 void getAccSpNed(void);
 void getAttSpNed(void);

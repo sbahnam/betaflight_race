@@ -19,10 +19,10 @@ extern ext_pos_ned_t extPosNed;
 extern ext_pos_state_t extPosState;
 
 #define EXT_POS_FREQ 50
-#define EXT_POS_TIMEOUT_US 300
+#define EXT_POS_TIMEOUT_US 300000
 
 void checkNewPos(void);
-void getPos(timeUs_t current);
+void getExternalPos(timeUs_t current);
 
 
 

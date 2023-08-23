@@ -10,7 +10,7 @@ fp_quaternion_t attSpNed = {.qi=1};
 bool attTrackYaw = true; 
 float spfSpBodyZ;
 
-fp_quaternion_t attErrorBody = {.qi=1};
+fp_quaternion_t attErrBody = {.qi=1};
 t_fp_vector rateSpBody = {0};
 t_fp_vector alphaSpBody = {0};
 
@@ -26,6 +26,13 @@ typedef enum {
 att_sp_source_t attSpSource = ATT_SP_SOURCE_POS;
 
 void getSpfBody(void) {
+    // get body rates
+    t_fp_vector rateEstBody = {
+        .V.X = 0.,
+        .V.Y = 0.,
+        .V.Z = 0.,
+    };
+
     // emulate parallel PD with cascaded (so we can limit velocity)
     t_fp_vector attGainsCasc = {
         .V.X = attGains.V.X / rateGains.V.X,
@@ -33,6 +40,44 @@ void getSpfBody(void) {
         .V.Z = attGains.V.Z / rateGains.V.Z
     };
 
+    // --- get rate setpoint
+    // memset?
+    rateSpBody.V.X = 0.;
+    rateSpBody.V.Y = 0.;
+    rateSpBody.V.Z = 0.;
+
+    float angleErr = 2*acos(attErrBody.qi); // should never be above 1 or below -1
+    if (angleErr > M_PIf)
+        angleErr -= 2*M_PIf; // make sure angleErr is [-pi, pi]
+
+    t_fp_vector attErr = {
+        .V.X = attErrBody.qx, .V.Y = attErrBody.qy, .V.Z = attErrBody.qz};
+
+    // final error is angle times axis
+    VEC3_SCALAR_MULT(attErr, angleErr);
+
+    // multiply with gains and constrain
+    VEC3_ELEM_MULT_ADD(rateSpBody, attGainsCasc, attErr);
+    VEC3_CONSTRAIN_XY_LENGTH(rateSpBody, DEGREES_TO_RADIANS(ATT_MAX_RATE_XY));
+    rateSpBody.V.Z = constrainf(rateSpBody.V.Z, -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z), -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z));
+
+    // get rotation acc setpoint simply by multiplying with gains
+    // rateErr = rateSpBody - rateEstBody
+    t_fp_vector rateErr = rateSpBody;
+    VEC3_SCALAR_MULT_ADD(rateSpBody, -1.0, rateEstBody);
+    VEC3_ELEM_MULT_ADD(alphaSpBody, rateGains, rateErr);
+
+    // INDI!
+}
+
+void getMotor(void) {
+    // mix! And call writeMotors or whatever
+
+    // BIG ASS TODO: CHECK THAT GETTING STUCK IN WHILE LOOP CANNOT CAUSE FLYAWAYS!
+}
+
+
+void getAttErrBody(void) {
     // get attitude estimate and inverse
     fp_quaternion_t attEstNed = {
         .qi = 1.,
@@ -43,15 +88,7 @@ void getSpfBody(void) {
     fp_quaternion_t attEstNedInv = attEstNed;
     attEstNedInv.qi = -attEstNed.qi;
 
-    // get body rates
-    t_fp_vector rateEstBody = {
-        .V.X = 0.,
-        .V.Y = 0.,
-        .V.Z = 0.,
-    };
-
     // get error
-    fp_quaternion_t attErrBody = {.qi = 1.};
     switch(attSpSource){
         case ATT_SP_SOURCE_POS:
             attErrBody = quatMult(attEstNedInv, attSpNed);
@@ -152,41 +189,4 @@ void getSpfBody(void) {
         default:
             break;
     }
-
-    // --- get rate setpoint
-    // memset?
-    rateSpBody.V.X = 0.;
-    rateSpBody.V.Y = 0.;
-    rateSpBody.V.Z = 0.;
-
-    float angleErr = 2*acos(attErrBody.qi); // should never be above 1 or below -1
-    if (angleErr > M_PIf)
-        angleErr -= 2*M_PIf; // make sure angleErr is [-pi, pi]
-
-    t_fp_vector attErr = {
-        .V.X = attErrBody.qx, .V.Y = attErrBody.qy, .V.Z = attErrBody.qz};
-
-    // final error is angle times axis
-    VEC3_SCALAR_MULT(attErr, angleErr);
-
-    // multiply with gains and constrain
-    VEC3_ELEM_MULT_ADD(rateSpBody, attGainsCasc, attErr);
-    VEC3_CONSTRAIN_XY_LENGTH(rateSpBody, DEGREES_TO_RADIANS(ATT_MAX_RATE_XY));
-    rateSpBody.V.Z = constrainf(rateSpBody.V.Z, -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z), -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z));
-
-    // get rotation acc setpoint simply by multiplying with gains
-    // rateErr = rateSpBody - rateEstBody
-    t_fp_vector rateErr = rateSpBody;
-    VEC3_SCALAR_MULT_ADD(rateSpBody, -1.0, rateEstBody);
-    VEC3_ELEM_MULT_ADD(alphaSpBody, rateGains, rateErr);
-
-    // INDI!
-
 }
-
-void getMotor(void) {
-    // mix! And call writeMotors or whatever
-
-    // BIG ASS TODO: CHECK THAT GETTING STUCK IN WHILE LOOP CANNOT CAUSE FLYAWAYS!
-}
-

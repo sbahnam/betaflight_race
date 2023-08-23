@@ -137,8 +137,11 @@ typedef enum {
 #ifdef USE_TELEMETRY
     TASK_TELEMETRY,
 #endif
-#ifdef USE_UPLINK
-    TASK_UPLINK,
+#ifdef USE_GPS_PI
+    TASK_GPS_PI,
+#endif
+#ifdef USE_POS_CTL
+    TASK_POS_CTL,
 #endif
 #ifdef USE_LED_STRIP
     TASK_LEDSTRIP,

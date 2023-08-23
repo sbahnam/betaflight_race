@@ -58,11 +58,13 @@
 #include "flight/mixer.h"
 #include "flight/pid.h"
 #include "flight/position.h"
+#include "flight/pos_ctl.h"
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
 #include "io/dashboard.h"
 #include "io/flashfs.h"
+#include "io/external_pos.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
 #include "io/piniobox.h"
@@ -325,10 +327,17 @@ static void taskTelemetry(timeUs_t currentTimeUs)
 }
 #endif
 
-#ifdef USE_UPLINK
-static void taskUplink(timeUs_t currentTimeUs)
+#ifdef USE_GPS_PI
+static void taskGpsPi(timeUs_t currentTimeUs)
 {
-    uplinkProcess(currentTimeUs);
+    getExternalPos(currentTimeUs);
+}
+#endif
+
+#ifdef USE_POS_CTL
+static void taskPosCtl(timeUs_t currentTimeUs)
+{
+    updatePosCtl(currentTimeUs);
 }
 #endif
 
@@ -421,8 +430,12 @@ task_attribute_t task_attributes[TASK_COUNT] = {
     [TASK_TELEMETRY] = DEFINE_TASK("TELEMETRY", NULL, NULL, taskTelemetry, TASK_PERIOD_HZ(2000), TASK_PRIORITY_LOW),
 #endif
 
-#ifdef USE_UPLINK
-    [TASK_UPLINK] = DEFINE_TASK("UPLINK", NULL, NULL, taskUplink, TASK_PERIOD_HZ(250), TASK_PRIORITY_MEDIUM),
+#ifdef USE_GPS_PI
+    [TASK_GPS_PI] = DEFINE_TASK("GPS_PI", NULL, NULL, taskGpsPi, TASK_PERIOD_HZ(50), TASK_PRIORITY_MEDIUM),
+#endif
+
+#ifdef USE_POS_CTL
+    [TASK_POS_CTL] = DEFINE_TASK("POS_CTL", NULL, NULL, taskPosCtl, TASK_PERIOD_HZ(50), TASK_PRIORITY_MEDIUM),
 #endif
 
 #ifdef USE_LED_STRIP
@@ -580,6 +593,15 @@ void tasksInit(void)
         }
         */
     }
+#endif
+
+#ifdef USE_GPS_PI
+    // todo! CHECK OTHER FLAGS for consistency
+    setTaskEnabled(TASK_GPS_PI, true);
+#endif
+
+#ifdef USE_POS_CTL
+    setTaskEnabled(TASK_POS_CTL, true);
 #endif
 
 #ifdef USE_LED_STRIP

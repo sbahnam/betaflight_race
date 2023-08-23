@@ -11,5 +11,6 @@ extern float spfSpBodyZ;
 extern bool attTrackYaw;
 
 void overrideAttSpNedFromRc(void);
+void getAttErrBody(void);
 void getSpfBody(void);
 void getMotor(void);

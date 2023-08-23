@@ -8,7 +8,7 @@ TARGET_MCU_LOWER_CASE = $(shell echo $(TARGET_MCU) | tr A-Z a-z)
 
 remote_flash : $(TARGET_ELF)
 	$(SSHPASS) -p $(REMOTE_PASSWORD) \
-		ssh -o StrictHostKeyChecking=no $(REMOTE_USER)@$(REMOTE_IP) \
+		ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 $(REMOTE_USER)@$(REMOTE_IP) \
 			'sudo ln -sf /usr/share/openocd/scripts/target/$(TARGET_MCU_LOWER_CASE)x.cfg /opt/openocd/chip.cfg \
 				&& sudo systemctl stop openocd.service \
 				&& mkdir -p ~/betaflight/obj/main'

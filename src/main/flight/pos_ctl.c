@@ -19,11 +19,27 @@ float yawSpNedRad = 0.;
 // todo DONE: split in horizontal/vertical, not XYZ.. thats kinda meaningless with yaw
 float posHGainP = 1.0;
 float posHGainD = 1.5;
-float posVGainP = 0.5;
-float posVGainD = 1.0;
+float posVGainP = 2.5;
+float posVGainD = 2.5;
 float velSpLimitXY = 1.5;
 float velSpLimitZ  = 0.5;
 float weathervaneP = 0.;
+
+void updatePosCtl(timeUs_t current) {
+    UNUSED(current);
+
+    if (extPosState == EXT_POS_NO_SIGNAL) {
+        // panic and level craft
+        attSpNed.qi = 1.;
+        attSpNed.qx = 0.;
+        attSpNed.qy = 0.;
+        attSpNed.qz = 0.;
+        return;
+    }
+
+    getAccSpNed();
+    getAttSpNed();
+}
 
 void getAccSpNed(void) {
     // precalculations
@@ -85,7 +101,7 @@ void getAttSpNed(void) {
         .qi = cosf(yawSpNedRad/2),
         .qx = 0.,
         .qy = 0.,
-        .qz = sinf(yawSpNedRad)/2
+        .qz = sinf(yawSpNedRad/2)
     };
 
     float acc_mag = VEC3_XY_LENGTH(accSpNed);
@@ -116,6 +132,5 @@ void getAttSpNed(void) {
     //        Can we compromise on both at the same time somehow? or adjust 
     //        tilt angle setpoint based on accSpNed? There will be a system of 
     //        constrained nl equations that can be solved within bounds.
-
 
 }
