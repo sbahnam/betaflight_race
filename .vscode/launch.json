@@ -11,6 +11,10 @@
             "request": "launch",
             "preLaunchTask": "start-openocd", 
             "type": "cortex-debug",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 2
+            },
             "servertype": "external",
             "gdbTarget": "10.0.0.1:3333",
             "runToEntryPoint": "main",

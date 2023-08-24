@@ -1,18 +1,33 @@
 
 #include "att_ctl.h"
 #include "common/maths.h"
+#include "common/axis.h"
 
+#include "sensors/gyro.h"
+#include "fc/rc.h"
+#include "fc/rc_controls.h"
+#include "flight/imu.h"
 #include "drivers/motor.h"
 
 #include <stdbool.h>
 
+#define RC_SCALE_STICKS 0.002
+#define RC_SCALE_THROTTLE 0.001
+#define RC_OFFSET_THROTTLE 1000
+#define RC_MAX_YAWRATE_DEG_S 150
+#define RC_MAX_SPF_Z 30
+
 fp_quaternion_t attSpNed = {.qi=1};
 bool attTrackYaw = true; 
-float spfSpBodyZ;
+float zAccSpNed;
+float yawRateSpNed;
+float u[4] = {0,0,0,0};
 
 fp_quaternion_t attErrBody = {.qi=1};
 t_fp_vector rateSpBody = {0};
 t_fp_vector alphaSpBody = {0};
+t_fp_vector yawRateSpBody = {0};
+float zSpfSpBody = 0.;
 
 t_fp_vector attGains = {.V.X = 80., .V.Y = 80., .V.Z = 35.};
 t_fp_vector rateGains = {.V.X = 13., .V.Y = 13., .V.Z = 10.};
@@ -25,12 +40,17 @@ typedef enum {
 
 att_sp_source_t attSpSource = ATT_SP_SOURCE_POS;
 
+void indiController(void) {
+    getSpfBody();
+}
+
 void getSpfBody(void) {
+
     // get body rates
     t_fp_vector rateEstBody = {
-        .V.X = 0.,
-        .V.Y = 0.,
-        .V.Z = 0.,
+        .V.X = gyro.gyroADCf[FD_ROLL], 
+        .V.Y = gyro.gyroADCf[FD_PITCH],
+        .V.Z = gyro.gyroADCf[FD_YAW],
     };
 
     // emulate parallel PD with cascaded (so we can limit velocity)
@@ -40,28 +60,30 @@ void getSpfBody(void) {
         .V.Z = attGains.V.Z / rateGains.V.Z
     };
 
-    // --- get rate setpoint
-    // memset?
-    rateSpBody.V.X = 0.;
-    rateSpBody.V.Y = 0.;
-    rateSpBody.V.Z = 0.;
+    // --- get body rates setpoint
+    // initialize to yaw-rate (transform) from higher level controllers/sticks
+    getYawRateSpBody();
+    rateSpBody = yawRateSpBody;
+
+    // add in the error term based on attitude quaternion error
+    getAttErrBody(); // sets attErrBody
 
     float angleErr = 2*acos(attErrBody.qi); // should never be above 1 or below -1
     if (angleErr > M_PIf)
         angleErr -= 2*M_PIf; // make sure angleErr is [-pi, pi]
 
-    t_fp_vector attErr = {
+    t_fp_vector attErrAxis = {
         .V.X = attErrBody.qx, .V.Y = attErrBody.qy, .V.Z = attErrBody.qz};
 
     // final error is angle times axis
-    VEC3_SCALAR_MULT(attErr, angleErr);
+    VEC3_SCALAR_MULT(attErrAxis, angleErr);
 
     // multiply with gains and constrain
-    VEC3_ELEM_MULT_ADD(rateSpBody, attGainsCasc, attErr);
+    VEC3_ELEM_MULT_ADD(rateSpBody, attGainsCasc, attErrAxis);
     VEC3_CONSTRAIN_XY_LENGTH(rateSpBody, DEGREES_TO_RADIANS(ATT_MAX_RATE_XY));
     rateSpBody.V.Z = constrainf(rateSpBody.V.Z, -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z), -DEGREES_TO_RADIANS(ATT_MAX_RATE_Z));
 
-    // get rotation acc setpoint simply by multiplying with gains
+    // --- get rotation acc setpoint simply by multiplying with gains
     // rateErr = rateSpBody - rateEstBody
     t_fp_vector rateErr = rateSpBody;
     VEC3_SCALAR_MULT_ADD(rateSpBody, -1.0, rateEstBody);
@@ -73,17 +95,158 @@ void getSpfBody(void) {
 void getMotor(void) {
     // mix! And call writeMotors or whatever
 
+    // python code:
+    /*
+import numpy as np
+GRAVITY = 9.81
+
+m = 0.37
+
+# calc inertia
+# oscillation period
+P = 0.64 # sec
+R = 0.153/2
+IzzRL = (m*GRAVITY*R*P*P) / (4*np.pi*np.pi)
+Izz = IzzRL - m*R*R
+# Izz = 0.677e-3
+
+Ixx = 0.6 * Izz
+Iyy = 0.8 * Izz
+I = np.diag([Ixx, Iyy, Izz])
+
+# we know that we can do 5g vertical acc, so load factor 4. Divide by 4 motors
+Tmax = m*GRAVITY*4 / 4
+
+# moment coefficient
+CM = 0.02
+
+# rotation directions (positive-z down)
+direc = [1, -1, 1, -1]
+
+width = 0.14
+length = 0.10
+
+X = .5 * np.array([[length, -width, 0.], [length, width, 0.], [-length, width, 0.], [-length, -width, 0.]])
+T = np.array([0., 0., -Tmax])
+G = np.zeros((4, 4))
+GF = np.zeros((1, 4))
+GM = np.zeros((3, 4))
+
+for i in range(4):
+    GF[0, i] = T[2]
+    GM[:, i] = np.cross(X[i, :], T)
+    GM[:, i] += -T*CM*direc[i] # negative because reaction force
+
+G[0, :] = GF / m
+G[1:, :] = np.linalg.pinv(I) @ GM
+
+Ginv = np.linalg.pinv(G)
+
+print(Ginv)
+    */
+
+    // TODO: just use activeSetSolve
+
+    // FL, FR, RR, RL
+    float Ginv[4][4] = {
+        {-0.0254842,   0.00042246,  0.0007886,   0.00246437},
+        {-0.0254842,  -0.00042246,  0.0007886,  -0.00246437},
+        {-0.0254842,  -0.00042246, -0.0007886,   0.00246437},
+        {-0.0254842,   0.00042246, -0.0007886,  -0.00246437},
+    };
+
+    // Fz, Mx, My, Mz
+    float v[4] = {zSpfSpBody, alphaSpBody.V.X, alphaSpBody.V.Y, alphaSpBody.V.Z};
+
+    // FL, FR, RR, RL
+    //float u[4]; // is not an extern
+
+    // Ginv * v and then constrain between 0 and 1
+    for (int i=0; i < 4; i++) {
+        float accumulate = Ginv[i][0] * v[0];
+        for (int j=1; j < 4; j++)
+            accumulate += Ginv[i][j] * v[j];
+        u[i] = constrainf(accumulate, 0., 1.);
+    }
+
     // BIG ASS TODO: CHECK THAT GETTING STUCK IN WHILE LOOP CANNOT CAUSE FLYAWAYS!
 }
 
+void getYawRateSpBody(void) {
+    if (attTrackYaw) {
+        // just track yaw setpoint from attitude quaternion setpoint
+        // no need to deal with anything
+        yawRateSpBody.V.X = 0.;
+        yawRateSpBody.V.Y = 0.;
+        yawRateSpBody.V.Z = 0.;
+        return;
+    }
+    // get yawRateSpNed, unless assumed set by position controller
+    switch (attSpSource) {
+        case ATT_SP_SOURCE_RC:
+            // get from RC
+            yawRateSpNed = getSetpointRate(YAW) * RC_SCALE_STICKS;
+            yawRateSpNed *= DEGREES_TO_RADIANS(RC_MAX_YAWRATE_DEG_S);
+            break;
+        case ATT_SP_SOURCE_POS:
+            // do nothing, just assume that yawRateSpNed has been set properly by posiotion controller
+            break;
+    }
+
+    // convert yawRateSpNed to Body
+    // todo: this local is defined twice.. make static somehow
+    fp_quaternion_t attEstNedInv = {
+        .qi = -attitude_q.w,
+        .qx = attitude_q.x,
+        .qy = attitude_q.y,
+        .qz = attitude_q.z,
+    };
+    yawRateSpBody = quatRotMatCol(attEstNedInv, 2);
+    VEC3_SCALAR_MULT(yawRateSpBody, yawRateSpNed);
+}
+
+void getSpfSpBodyZ(void) {
+    // similar to getYawRateSpBody, decide which Ned z accel to use and transform
+
+    switch (attSpSource) {
+        case ATT_SP_SOURCE_RC:
+            // get from RC directly
+            zSpfSpBody = (rcCommand[THROTTLE] - RC_OFFSET_THROTTLE);
+            zSpfSpBody *= RC_SCALE_THROTTLE * RC_MAX_SPF_Z;
+            break;
+        case ATT_SP_SOURCE_POS:
+            zSpfSpBody = (-9.81 + zAccSpNed);
+
+            float cos_tilt_angle = getCosTiltAngle();
+            if ((cos_tilt_angle < 0.5) && (cos_tilt_angle > 0.)) {
+                // high tilt, but not inverted, limit divisor to 0.5
+                cos_tilt_angle = 0.5;
+            } else if (cos_tilt_angle <= 0.) {
+                // inverted: disable throttle correction
+                cos_tilt_angle = 1.0;
+            }
+
+            zSpfSpBody /= cos_tilt_angle;
+            // note: this only gives offset free pos control, if spfSpBodyZ is reached 
+            //       offset-free, ie through INDI
+            // note2: if accSpNed.V.Z is non-zero, then accSpNed is over or undershot.
+            //        Can we compromise on both at the same time somehow? or adjust 
+            //        tilt angle setpoint based on accSpNed? There will be a system of 
+            //        constrained nl equations that can be solved within bounds.
+
+            // this should probably be in pos_ctl, because of the tradeoff... another allocation step?
+            break;
+    }
+}
 
 void getAttErrBody(void) {
     // get attitude estimate and inverse
+    // todo: rewrite with the quaternion type defined in imu
     fp_quaternion_t attEstNed = {
-        .qi = 1.,
-        .qx = 0.,
-        .qy = 0.,
-        .qz = 0.
+        .qi = attitude_q.w,
+        .qx = attitude_q.x,
+        .qy = attitude_q.y,
+        .qz = attitude_q.z,
     };
     fp_quaternion_t attEstNedInv = attEstNed;
     attEstNedInv.qi = -attEstNed.qi;
@@ -121,12 +284,13 @@ void getAttErrBody(void) {
             // find tilt axis --> this can be done better! 
             // Now combined XY input gives bigger tilt angle before limiting,
             // which results in a sort of radial deadzone past the x*y=1 circle
-            float RC[2] = {0., 0.}; //replace with actual RC. Assumed positive in body-xy and between -1 and 1
+            float roll = getSetpointRate(ROLL) * RC_SCALE_STICKS;
+            float pitch = getSetpointRate(PITCH) * RC_SCALE_STICKS;
 #define RC_MAX_TILT_DEG 20
             float rc_scaler = tanf(DEGREES_TO_RADIANS(RC_MAX_TILT_DEG));
             t_fp_vector bodyZspNed = {
-                .V.X = rc_scaler * (-stickXNed.V.X * RC[0] + -stickYNed.V.X * RC[1]),
-                .V.Y = rc_scaler * (-stickXNed.V.Y * RC[0] + -stickYNed.V.Y * RC[1]),
+                .V.X = rc_scaler * (-stickXNed.V.X * pitch + -stickYNed.V.X * roll),
+                .V.Y = rc_scaler * (-stickXNed.V.Y * pitch + -stickYNed.V.Y * roll),
                 .V.Z = 1.
             };
             VEC3_CONSTRAIN_XY_LENGTH(bodyZspNed, rc_scaler); // limit total tilt

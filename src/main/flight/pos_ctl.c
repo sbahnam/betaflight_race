@@ -124,13 +124,6 @@ void getAttSpNed(void) {
     };
 
     attSpNed = quatMult(sp_tilt, sp_yaw);
-
-    spfSpBodyZ = (-9.81 + accSpNed.V.Z) / cosf(tilt_angle);
-    // note: this only gives offset free pos control, if spfSpBodyZ is reached 
-    //       offset-free, ie through INDI
-    // note2: if accSpNed.V.Z is non-zero, then accSpNed is over or undershot.
-    //        Can we compromise on both at the same time somehow? or adjust 
-    //        tilt angle setpoint based on accSpNed? There will be a system of 
-    //        constrained nl equations that can be solved within bounds.
+    zAccSpNed = accSpNed.V.Z;
 
 }

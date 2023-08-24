@@ -7,10 +7,14 @@
 #define ATT_MAX_RATE_Z 150
 
 extern fp_quaternion_t attSpNed;
-extern float spfSpBodyZ;
+extern float zAccSpNed;
+extern float yawRateSpNed;
 extern bool attTrackYaw;
+extern float u[4];
 
-void overrideAttSpNedFromRc(void);
+void indiController(void);
+
+void getYawRateSpBody(void);
 void getAttErrBody(void);
 void getSpfBody(void);
 void getMotor(void);

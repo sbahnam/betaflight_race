@@ -68,7 +68,9 @@
 
 #include "flight/imu.h"
 #include "flight/mixer.h"
+#include "flight/mixer_init.h"
 #include "flight/pid.h"
+#include "flight/att_ctl.h"
 #include "flight/position.h"
 #include "flight/rpm_filter.h"
 #include "flight/servos.h"
@@ -1085,6 +1087,34 @@ void processRxModes(timeUs_t currentTimeUs)
     pidSetAntiGravityState(IS_RC_MODE_ACTIVE(BOXANTIGRAVITY) || featureIsEnabled(FEATURE_ANTI_GRAVITY));
 }
 
+#ifdef USE_INDI
+static FAST_CODE_NOINLINE void subTaskIndiController(timeUs_t currentTimeUs) {
+    UNUSED(currentTimeUs);
+    indiController();
+}
+
+static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeUs) {
+    UNUSED(currentTimeUs);
+
+    uint8_t numMotors = motorDeviceCount();
+
+    if (!ARMING_FLAG(ARMED)) {
+        for (int i = 0; i < numMotors; i++) {
+            motor[i] = mixerRuntime.disarmMotorOutput;
+        }
+    } else {
+        // check pidApplyThrustLinearization(float motorOutput)
+        // check order!
+        motor[0] = scaleRangef(u[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[1] = scaleRangef(u[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[2] = scaleRangef(u[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[3] = scaleRangef(u[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+    }
+
+    writeMotors();
+}
+#endif
+
 static FAST_CODE_NOINLINE void subTaskPidController(timeUs_t currentTimeUs)
 {
     uint32_t startTime = 0;
@@ -1269,6 +1299,15 @@ FAST_CODE void taskFiltering(timeUs_t currentTimeUs)
     gyroFiltering(currentTimeUs);
 
 }
+
+#ifdef USE_INDI
+FAST_CODE void taskMainIndiLoop(timeUs_t currentTimeUs)
+{
+    subTaskRcCommand(currentTimeUs);
+    subTaskIndiController(currentTimeUs);
+    subTaskIndiApplyToActuators(currentTimeUs);
+}
+#endif
 
 // Function for loop trigger
 FAST_CODE void taskMainPidLoop(timeUs_t currentTimeUs)

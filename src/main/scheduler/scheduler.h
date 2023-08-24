@@ -102,6 +102,9 @@ typedef enum {
     TASK_GYRO,
     TASK_FILTER,
     TASK_PID,
+#ifdef USE_INDI
+    TASK_INDI,
+#endif
     TASK_ACCEL,
     TASK_ATTITUDE,
     TASK_RX,

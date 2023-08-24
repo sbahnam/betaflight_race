@@ -59,6 +59,7 @@
 #include "flight/pid.h"
 #include "flight/position.h"
 #include "flight/pos_ctl.h"
+#include "flight/att_ctl.h"
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
@@ -385,6 +386,9 @@ task_attribute_t task_attributes[TASK_COUNT] = {
     [TASK_GYRO] = DEFINE_TASK("GYRO", NULL, NULL, taskGyroSample, TASK_GYROPID_DESIRED_PERIOD, TASK_PRIORITY_REALTIME),
     [TASK_FILTER] = DEFINE_TASK("FILTER", NULL, NULL, taskFiltering, TASK_GYROPID_DESIRED_PERIOD, TASK_PRIORITY_REALTIME),
     [TASK_PID] = DEFINE_TASK("PID", NULL, NULL, taskMainPidLoop, TASK_GYROPID_DESIRED_PERIOD, TASK_PRIORITY_REALTIME),
+#ifdef USE_INDI
+    [TASK_INDI] = DEFINE_TASK("INDI", NULL, NULL, taskMainIndiLoop, TASK_GYROPID_DESIRED_PERIOD, TASK_PRIORITY_REALTIME),
+#endif
 
 #ifdef USE_ACC
     [TASK_ACCEL] = DEFINE_TASK("ACC", NULL, NULL, taskUpdateAccelerometer, TASK_PERIOD_HZ(1000), TASK_PRIORITY_MEDIUM),
@@ -528,9 +532,11 @@ void tasksInit(void)
         rescheduleTask(TASK_GYRO, gyro.sampleLooptime);
         rescheduleTask(TASK_FILTER, gyro.targetLooptime);
         rescheduleTask(TASK_PID, gyro.targetLooptime);
+        rescheduleTask(TASK_INDI, gyro.targetLooptime);
         setTaskEnabled(TASK_GYRO, true);
         setTaskEnabled(TASK_FILTER, true);
         setTaskEnabled(TASK_PID, true);
+        setTaskEnabled(TASK_INDI, true);
         schedulerEnableGyro();
     }
 
