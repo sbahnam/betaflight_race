@@ -76,6 +76,7 @@
 #include "flight/servos.h"
 
 #include "io/beeper.h"
+#include "io/external_pos.h"
 #include "io/gps.h"
 #include "io/pidaudio.h"
 #include "io/serial.h"
@@ -998,6 +999,15 @@ void processRxModes(timeUs_t currentTimeUs)
     }
 #endif
 
+#ifdef USE_POS_CTL
+    if (IS_RC_MODE_ACTIVE(BOXPOSCTL) && sensors(SENSOR_ACC) && (extPosState > EXT_POS_NO_SIGNAL)){
+        if (!FLIGHT_MODE(POS_CTL_MODE))
+            ENABLE_FLIGHT_MODE(POS_CTL_MODE);
+        else
+            DISABLE_FLIGHT_MODE(POS_CTL_MODE);
+    }
+#endif
+
     if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
         //LED1_ON; // @tblaha this LED is used for debugging now.
         // increase frequency of attitude task to reduce drift when in angle or horizon mode
@@ -1104,11 +1114,10 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
         }
     } else {
         // check pidApplyThrustLinearization(float motorOutput)
-        // check order!
-        motor[0] = scaleRangef(u[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[1] = scaleRangef(u[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[2] = scaleRangef(u[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[3] = scaleRangef(u[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[0] = scaleRangef(u[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[1] = scaleRangef(u[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[2] = scaleRangef(u[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[3] = scaleRangef(u[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
     }
 
     writeMotors();

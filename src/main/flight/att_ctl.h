@@ -16,5 +16,6 @@ void indiController(void);
 
 void getYawRateSpBody(void);
 void getAttErrBody(void);
-void getSpfBody(void);
+void getAlphaBody(void);
+void getSpfSpBodyZ(void);
 void getMotor(void);

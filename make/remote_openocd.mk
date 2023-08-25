@@ -17,7 +17,7 @@ remote_flash : $(TARGET_ELF)
 		--timeout=3 \
 		$(TARGET_ELF) $(REMOTE_USER)@$(REMOTE_IP):/home/pi/betaflight/obj/main/
 	$(SSHPASS) -p $(REMOTE_PASSWORD) \
-		ssh -o StrictHostKeyChecking=no $(REMOTE_USER)@$(REMOTE_IP) \
+		ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 $(REMOTE_USER)@$(REMOTE_IP) \
 			'openocd -f /opt/openocd/openocd.cfg \
 			-c "program /home/pi/betaflight/$(TARGET_ELF) verify reset exit"'
 
