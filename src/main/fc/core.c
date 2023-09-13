@@ -1108,13 +1108,13 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
 
     uint8_t numMotors = motorDeviceCount();
 
-    static timeUs_t firstArmed = 0;
+    //static timeUs_t firstArmed = 0;
 
     if (!ARMING_FLAG(ARMED)) {
         for (int i = 0; i < numMotors; i++) {
             motor[i] = mixerRuntime.disarmMotorOutput;
         }
-        firstArmed = 0;
+        //firstArmed = 0;
     } else {
         /* test program
         if (firstArmed == 0)

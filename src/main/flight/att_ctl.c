@@ -13,6 +13,7 @@
 #include "flight/pid.h"
 #include "flight/mixer_init.h"
 #include "drivers/motor.h"
+#include "drivers/dshot.h"
 #include <math.h>
 #include "config/config.h"
 
@@ -39,6 +40,8 @@ t_fp_vector attGains = {.V.X = 800.f, .V.Y = 800.f, .V.Z = 200.f};
 t_fp_vector rateGains = {.V.X = 13.f, .V.Y = 13.f, .V.Z = 10.f};
 
 float u[MAXU] = {0.f};
+float omega[MAXU] = {0.f};
+float omega_hover = 1900.f;
 float u_state[MAXU] = {0.f};
 float v[MAXV];
 float nu = 4;
@@ -48,12 +51,23 @@ biquadFilter_t dgyroNotch[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass2[XYZ_AXIS_COUNT];
 
-float actTimeConst = 0.03f; // sec. Don't go below 0.01
+float actTimeConst = 0.02f; // sec. Don't go below 0.01
 pt1Filter_t actLag[MAXU];
 biquadFilter_t actNotch[MAXU];
 dtermLowpass_t actLowpass[MAXU];
 dtermLowpass_t actLowpass2[MAXU];
 
+float k_thrust  = 2.58e-7f;
+float tau_rpm = 0.02f;
+float Tmax = 4.5f;
+
+// low pass for rpm sensing
+#if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
+dtermLowpass_t erpmLowpass[MAXU];
+#endif
+
+
+// linearization
 float A = 0.f;
 float B = 0.f;
 float C = 0.f;
@@ -89,18 +103,17 @@ void indiInit(const pidProfile_t * pidProfile) {
         // init backup actuator state filters
         pt1FilterInit(&actLag[i], pt1FilterGain(1.f / actTimeConst, pidRuntime.dT));
 
+        // rpm feedback filter. A bit handwavy, but using filter constant from
+        // dgyro lp seems most correct
+#if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
+        erpmLowpass[i] = pidRuntime.dtermLowpass[0];
+#endif
+
         // init indi filters on act state
         actNotch[i] = pidRuntime.dtermNotch[0];
         actLowpass[i] = pidRuntime.dtermLowpass[0];
         actLowpass2[i] = pidRuntime.dtermLowpass2[0];
     }
-
-
-    // understand thrust-rpm-dshot transformations to use rpm feedback
-    //nope pidApplyThrustLinearization
-
-    // implement new G2-term
-    //nope
 }
 
 void indiController(void) {
@@ -193,24 +206,69 @@ void getMotor(void) {
     };
     */
 
+    float G1[4][4] = {
+        { -10.97752222f,  -10.97752222f,  -10.97752222f,  -10.97752222f},
+        { 505.80871408f, -505.80871408f, -505.80871408f,  505.80871408f},
+        { 305.98392703f,  305.98392703f, -305.98392703f, -305.98392703f},
+        {  63.62310934f,  -63.62310934f,   63.62310934f,  -63.62310934f},
+    };
+
     float G2[4][4] = {
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
-        {0.01f, -0.01f, 0.01f, -0.01f}
+        {0.002285f, -0.002285f,  0.002285f, -0.002285f},
     };
 
+    // 1 / (2 tau k)
+    float G2_normalizer = 96899224.f;
+
     static float du[MAXU] = {0.f};
+    static float gyro_prev[XYZ_AXIS_COUNT] = {0.f, 0.f, 0.f};
+    static float omega_prev[MAXU] = {0.f};
 
     // get (filtered) gyro rate derivative
     float dgyro[XYZ_AXIS_COUNT];
-    float gyro_prev[XYZ_AXIS_COUNT] = {0.f, 0.f, 0.f};
-    for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
+    for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
         dgyro[axis] = pidRuntime.pidFrequency * (gyro.gyroADCf[axis] - gyro_prev[axis]);
         dgyro[axis] = pidRuntime.dtermNotchApplyFn((filter_t *) &dgyroNotch[axis], dgyro[axis]);
         dgyro[axis] = pidRuntime.dtermLowpassApplyFn((filter_t *) &dgyroLowpass[axis], dgyro[axis]);
         dgyro[axis] = pidRuntime.dtermLowpass2ApplyFn((filter_t *) &dgyroLowpass2[axis], dgyro[axis]);
         gyro_prev[axis] = gyro.gyroADCf[axis];
+    }
+
+    // get rotation speeds and accelerations from dshot, or fallback
+    float omega_inv[MAXU];
+    float omega_dot[MAXU] = {0.f};
+    for (int i = 0; i <= nu; i++) {
+#if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
+        if (isDshotTelemetryActive()) {
+            omega[i] = pidRuntime.dtermLowpassApplyFn((filter_t *) &erpmLowpass[i], getDshotTelemetry(i));
+            // to get to rad/s, multiply with erpm scaling (100), then divide by pole pairs and convert rpm to rad
+            omega[i] *= 100.f * (motorConfig()->motorPoleCount / 2.f) * (2.f * M_PIf / 60.f);
+
+            omega_prev[i] = omega[i];
+        } else
+#endif
+        {
+            // fallback option 1: fixed omega_hover
+            omega[i] = omega_hover;
+
+            // fallback option 2: use actLag filter. TODO
+        }
+
+        // needed later as well, not just for fallback
+        omega_inv[i] = (fabsf(omega[i]) > 0.5f * omega_hover) ? 1.f / omega[i] : 1.f / omega_hover;
+
+#if defined(USE_OMEGA_DOT_FEEDBACK) && defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
+        if (isDshotTelemetryActive()) {
+            omega_dot[i] = (omega[i] - omega_prev[i]) * pidRuntime.pidFrequency;
+            // probably do some limiting here
+        } else
+#endif
+        {
+            omega_dot[i] = Tmax * du[i] * omega_inv[i] * G2_normalizer;
+        }
     }
 
     // compute pseudocontrol
@@ -220,21 +278,24 @@ void getMotor(void) {
     dv[2] = alphaSpBody.V.Y - dgyro[FD_PITCH];
     dv[3] = alphaSpBody.V.Z - dgyro[FD_YAW];
 
-    // add in G2 contributions G2 * du
+    // add in G2 contributions G2 * omega_dot
     for (int j=0; j < nv; j++) {
         for (int i=0; i < nu; i++) {
-            dv[j] += G2[j][i]*du[i];
+            dv[j] += G2[j][i]*omega_dot[i];
         }
     }
 
     // compute pseudoinverse pinv(G1+G2)
     // TODO: use solver
-    float G1G2_inv[MAXU][MAXV] = {
-        {-0.0254842f,   0.00042246f,  0.0007886f,   0.00246437f},
-        {-0.0254842f,  -0.00042246f,  0.0007886f,  -0.00246437f},
-        {-0.0254842f,  -0.00042246f, -0.0007886f,   0.00246437f},
-        {-0.0254842f,   0.00042246f, -0.0007886f,  -0.00246437f},
-    };
+    float G1G2[MAXV][MAXU];
+    for (int i=0; i < nv; i++) {
+        for (int j=0; j < nu; j++) {
+            G1G2[i][j] = G1[i][j] + G2_normalizer * G2[i][j] * omega_inv[i];
+        }
+    }
+
+    float G1G2_inv[MAXU][MAXV];
+    // pseudoinverse or something?
 
     // du = Ginv * dv and then constrain between 0 and 1
     for (int i=0; i < nu; i++) {
