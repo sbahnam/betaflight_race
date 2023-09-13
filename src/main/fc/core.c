@@ -1108,16 +1108,47 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
 
     uint8_t numMotors = motorDeviceCount();
 
+    static timeUs_t firstArmed = 0;
+
     if (!ARMING_FLAG(ARMED)) {
         for (int i = 0; i < numMotors; i++) {
             motor[i] = mixerRuntime.disarmMotorOutput;
         }
+        firstArmed = 0;
     } else {
+        /* test program
+        if (firstArmed == 0)
+            firstArmed = currentTimeUs;
+
+        u[0] = 0.;
+        int maxu = 7;
+        timeDelta_t interv = 1e6;
+        for (int i = 0; i <= maxu; i++) {
+            if (cmpTimeUs(currentTimeUs, firstArmed) > i*interv)
+                u[0] = i * 0.1f;
+        }
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+1)*interv)
+            u[0] = 0.0f;
+
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+5)*interv)
+            u[0] = 0.8f;
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+6)*interv)
+            u[0] = 0.9f;
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+7)*interv)
+            u[0] = 0.0f;
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+11)*interv)
+            u[0] = 1.0f;
+        if (cmpTimeUs(currentTimeUs, firstArmed) > (maxu+12)*interv)
+            u[0] = 0.0f;
+        */
+
         // check pidApplyThrustLinearization(float motorOutput)
         motor[0] = scaleRangef(u[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
         motor[1] = scaleRangef(u[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
         motor[2] = scaleRangef(u[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
         motor[3] = scaleRangef(u[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        for (int i = 0; i < numMotors; i++)
+            motor[i] = indiThrustLinearization(motor[i]);
     }
 
     writeMotors();
@@ -1312,9 +1343,18 @@ FAST_CODE void taskFiltering(timeUs_t currentTimeUs)
 #ifdef USE_INDI
 FAST_CODE void taskMainIndiLoop(timeUs_t currentTimeUs)
 {
+#ifdef USE_RPM_FILTER
+    rpmFilterUpdate();
+#endif
+
     subTaskRcCommand(currentTimeUs);
     subTaskIndiController(currentTimeUs);
     subTaskIndiApplyToActuators(currentTimeUs);
+#ifdef USE_BLACKBOX
+    if (!cliMode && blackboxConfig()->device) {
+        blackboxUpdate(currentTimeUs);
+    }
+#endif
 }
 #endif
 

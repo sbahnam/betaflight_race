@@ -119,11 +119,11 @@ void float_eulers_of_quat(fp_angles_t *e, fp_quaternion_t *q)
   const float qxqy = q->qx * q->qy;
   const float qxqz = q->qx * q->qz;
   const float qyqz = q->qy * q->qz;
-  const float dcm00 = 1.0 - 2.*(qy2 +  qz2);
-  const float dcm01 =       2.*(qxqy + qiqz);
-  float dcm02       =       2.*(qxqz - qiqy);
-  const float dcm12 =       2.*(qyqz + qiqx);
-  const float dcm22 = 1.0 - 2.*(qx2 +  qy2);
+  const float dcm00 = 1.f - 2.f*(qy2 +  qz2);
+  const float dcm01 =       2.f*(qxqy + qiqz);
+  float dcm02       =       2.f*(qxqz - qiqy);
+  const float dcm12 =       2.f*(qyqz + qiqx);
+  const float dcm22 = 1.f - 2.f*(qx2 +  qy2);
 
   // asinf does not exist outside [-1,1]
   dcm02 = constrainf(dcm02, -1.0f, +1.0f);

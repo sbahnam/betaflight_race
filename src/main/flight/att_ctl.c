@@ -2,36 +2,106 @@
 #include "att_ctl.h"
 #include "common/maths.h"
 #include "common/axis.h"
+#include "common/filter.h"
 
 #include "sensors/gyro.h"
+#include "sensors/acceleration.h"
 #include "fc/rc.h"
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
 #include "flight/imu.h"
+#include "flight/pid.h"
+#include "flight/mixer_init.h"
 #include "drivers/motor.h"
+#include <math.h>
+#include "config/config.h"
 
 #include <stdbool.h>
 
-#define RC_SCALE_STICKS 0.002
-#define RC_SCALE_THROTTLE 0.001
-#define RC_OFFSET_THROTTLE 1000
-#define RC_MAX_YAWRATE_DEG_S 150
-#define RC_MAX_SPF_Z -30
+#define RC_SCALE_STICKS 0.002f
+#define RC_SCALE_THROTTLE 0.001f
+#define RC_OFFSET_THROTTLE 1000.f
+#define RC_MAX_YAWRATE_DEG_S 150.f
+#define RC_MAX_SPF_Z -30.f
 
-fp_quaternion_t attSpNed = {.qi=1};
+fp_quaternion_t attSpNed = {.qi=1.f};
 bool attTrackYaw = true;
 float zAccSpNed;
 float yawRateSpNed;
-float u[4] = {0,0,0,0};
 
-fp_quaternion_t attErrBody = {.qi=1};
+fp_quaternion_t attErrBody = {.qi=1.f};
 t_fp_vector rateSpBody = {0};
 t_fp_vector alphaSpBody = {0};
 t_fp_vector yawRateSpBody = {0};
 float zSpfSpBody = 0.;
 
-t_fp_vector attGains = {.V.X = 800., .V.Y = 800., .V.Z = 200.};
-t_fp_vector rateGains = {.V.X = 13., .V.Y = 13., .V.Z = 10.};
+t_fp_vector attGains = {.V.X = 800.f, .V.Y = 800.f, .V.Z = 200.f};
+t_fp_vector rateGains = {.V.X = 13.f, .V.Y = 13.f, .V.Z = 10.f};
+
+float u[MAXU] = {0.f};
+float u_state[MAXU] = {0.f};
+float v[MAXV];
+float nu = 4;
+float nv = 4;
+
+biquadFilter_t dgyroNotch[XYZ_AXIS_COUNT];
+dtermLowpass_t dgyroLowpass[XYZ_AXIS_COUNT];
+dtermLowpass_t dgyroLowpass2[XYZ_AXIS_COUNT];
+
+float actTimeConst = 0.03f; // sec. Don't go below 0.01
+pt1Filter_t actLag[MAXU];
+biquadFilter_t actNotch[MAXU];
+dtermLowpass_t actLowpass[MAXU];
+dtermLowpass_t actLowpass2[MAXU];
+
+float A = 0.f;
+float B = 0.f;
+float C = 0.f;
+float k = 0.f;
+
+void indiInit(const pidProfile_t * pidProfile) {
+    UNUSED(pidProfile);
+
+    // init states
+    //nu = motorDeviceCount();
+    for (int i = 0; i < nu; i++)
+        u_state[i] = 0.f;
+    for (int i = 0; i < nv; i++)
+        v[i] = 0.f;
+
+    // init thrust linearization https://www.desmos.com/calculator/v9q7cxuffs
+    float k_conf = pidProfile->thrustLinearization / 100.f;
+    if ((k_conf > 0.025) && (k_conf < 0.7)) {
+        k = k_conf;
+        A = 1.f / k;
+        B = (sq(k) - 2.f*k + 1.f) / (4.f*sq(k));
+        C = (k - 1) / (2.f*k);
+    }
+
+    // init dgyro filters (just copy init values from pid_init)
+    for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
+        dgyroNotch[axis] = pidRuntime.dtermNotch[axis];
+        dgyroLowpass[axis] = pidRuntime.dtermLowpass[axis];
+        dgyroLowpass2[axis] = pidRuntime.dtermLowpass2[axis];
+    }
+
+    for (int i = 0; i < nu; i++) {
+        // init backup actuator state filters
+        pt1FilterInit(&actLag[i], pt1FilterGain(1.f / actTimeConst, pidRuntime.dT));
+
+        // init indi filters on act state
+        actNotch[i] = pidRuntime.dtermNotch[0];
+        actLowpass[i] = pidRuntime.dtermLowpass[0];
+        actLowpass2[i] = pidRuntime.dtermLowpass2[0];
+    }
+
+
+    // understand thrust-rpm-dshot transformations to use rpm feedback
+    //nope pidApplyThrustLinearization
+
+    // implement new G2-term
+    //nope
+}
 
 void indiController(void) {
     getAlphaBody();
@@ -65,12 +135,26 @@ void getAlphaBody(void) {
     // add in the error term based on attitude quaternion error
     getAttErrBody(); // sets attErrBody
 
-    float angleErr = 2*acos(attErrBody.qi); // should never be above 1 or below -1
+    float angleErr = 2.f*acos_approx(attErrBody.qi); // should never be above 1 or below -1
     if (angleErr > M_PIf)
-        angleErr -= 2*M_PIf; // make sure angleErr is [-pi, pi]
+        angleErr -= 2.f*M_PIf; // make sure angleErr is [-pi, pi]
+        // some heuristic could be used here, because this is far from optimal
+        // in cases where we have high angular rate and the most efficient way
+        // to get to the setpoint is actually to continue through a flip, and
+        // not counter steer initially
 
-    t_fp_vector attErrAxis = {
-        .V.X = attErrBody.qx, .V.Y = attErrBody.qy, .V.Z = attErrBody.qz};
+    t_fp_vector attErrAxis = {.V.X = 1.f};
+    float norm = sqrtf(1.f - attErrBody.qi*attErrBody.qi);
+    if (norm > 1e-8f) {
+        // procede as normal
+        float normInv = 1.f / norm;
+        attErrAxis.V.X = normInv * attErrBody.qx;
+        attErrAxis.V.Y = normInv * attErrBody.qy;
+        attErrAxis.V.Z = normInv * attErrBody.qz;
+    } // else {
+        // qi = +- 1 singularity. But this means the error angle is so small, 
+        // that we don't care abuot this axis. So chose axis to remain 1,0,0
+    // }
 
     // final error is angle times axis
     VEC3_SCALAR_MULT(attErrAxis, angleErr);
@@ -83,108 +167,94 @@ void getAlphaBody(void) {
     // --- get rotation acc setpoint simply by multiplying with gains
     // rateErr = rateSpBody - rateEstBody
     t_fp_vector rateErr = rateSpBody;
-    VEC3_SCALAR_MULT_ADD(rateErr, -1.0, rateEstBody);
-    alphaSpBody.V.X = 0.;
-    alphaSpBody.V.Y = 0.;
-    alphaSpBody.V.Z = 0.;
-    VEC3_ELEM_MULT_ADD(alphaSpBody, rateGains, rateErr);
+    VEC3_SCALAR_MULT_ADD(rateErr, -1.0f, rateEstBody);
 
+    // alphaSpBody = rateGains * rateErr
+    alphaSpBody.V.X = rateGains.V.X * rateErr.V.X;
+    alphaSpBody.V.Y = rateGains.V.Y * rateErr.V.Y;
+    alphaSpBody.V.Z = rateGains.V.Z * rateErr.V.Z;
 }
 
 void getMotor(void) {
     // mix! And call writeMotors or whatever
 
-    // python code:
-    /*
-import numpy as np
-GRAVITY = 9.81
-
-m = 0.37
-
-# calc inertia
-# oscillation period
-P = 0.64 # sec
-R = 0.153/2
-IzzRL = (m*GRAVITY*R*P*P) / (4*np.pi*np.pi)
-Izz = IzzRL - m*R*R
-# Izz = 0.677e-3
-
-Ixx = 0.6 * Izz
-Iyy = 0.8 * Izz
-I = np.diag([Ixx, Iyy, Izz])
-
-# we know that we can do 4g vertical acc, so load factor 4. Divide by 4 motors
-Tmax = m*GRAVITY*4 / 4
-
-# moment coefficient
-CM = 0.02
-
-# rotation directions (positive-z down)
-direc = [1, -1, 1, -1]
-
-width = 0.14
-length = 0.10
-
-X = .5 * np.array([[length, -width, 0.], [length, width, 0.], [-length, width, 0.], [-length, -width, 0.]])
-T = np.array([0., 0., -Tmax])
-G = np.zeros((4, 4))
-GF = np.zeros((1, 4))
-GM = np.zeros((3, 4))
-
-for i in range(4):
-    GF[0, i] = T[2]
-    GM[:, i] = np.cross(X[i, :], T)
-    GM[:, i] += -T*CM*direc[i] # negative because reaction force
-
-G[0, :] = GF / m
-G[1:, :] = np.linalg.inv(I) @ GM
-
-Ginv = np.linalg.pinv(G)
-
-print(Ginv)
-    */
+    // to generate G1 and G2, see python code src/utils/indi/genGMc.py
 
     // TODO: just use activeSetSolve
-    // TODO: scale with currentPidProfile->motor_output_limit / 100.0f
+    // TODO: Done. scale with currentPidProfile->motor_output_limit / 100.0f
 
     // FL, FR, RR, RL
+    /*
     float Ginv[4][4] = {
-        {-0.0254842,   0.00042246,  0.0007886,   0.00246437},
-        {-0.0254842,  -0.00042246,  0.0007886,  -0.00246437},
-        {-0.0254842,  -0.00042246, -0.0007886,   0.00246437},
-        {-0.0254842,   0.00042246, -0.0007886,  -0.00246437},
+        {-0.0254842f,   0.00042246f,  0.0007886f,   0.00246437f},
+        {-0.0254842f,  -0.00042246f,  0.0007886f,  -0.00246437f},
+        {-0.0254842f,  -0.00042246f, -0.0007886f,   0.00246437f},
+        {-0.0254842f,   0.00042246f, -0.0007886f,  -0.00246437f},
+    };
+    */
+
+    float G2[4][4] = {
+        {0.f, 0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f, 0.f},
+        {0.01f, -0.01f, 0.01f, -0.01f}
     };
 
-    // Fz, Mx, My, Mz
-    float v[4] = {zSpfSpBody, alphaSpBody.V.X, alphaSpBody.V.Y, alphaSpBody.V.Z};
+    static float du[MAXU] = {0.f};
 
-    // FL, FR, RR, RL
-    //float u[4]; // is not an extern
-
-    // INDI!
-
-    // Ginv * v and then constrain between 0 and 1
-    for (int i=0; i < 4; i++) {
-        float accumulate = Ginv[i][0] * v[0];
-        for (int j=1; j < 4; j++)
-            accumulate += Ginv[i][j] * v[j];
-        u[i] = constrainf(accumulate, 0., 1.);
+    // get (filtered) gyro rate derivative
+    float dgyro[XYZ_AXIS_COUNT];
+    float gyro_prev[XYZ_AXIS_COUNT] = {0.f, 0.f, 0.f};
+    for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
+        dgyro[axis] = pidRuntime.pidFrequency * (gyro.gyroADCf[axis] - gyro_prev[axis]);
+        dgyro[axis] = pidRuntime.dtermNotchApplyFn((filter_t *) &dgyroNotch[axis], dgyro[axis]);
+        dgyro[axis] = pidRuntime.dtermLowpassApplyFn((filter_t *) &dgyroLowpass[axis], dgyro[axis]);
+        dgyro[axis] = pidRuntime.dtermLowpass2ApplyFn((filter_t *) &dgyroLowpass2[axis], dgyro[axis]);
+        gyro_prev[axis] = gyro.gyroADCf[axis];
     }
 
-    // BIG ASS TODO: CHECK THAT GETTING STUCK IN WHILE LOOP CANNOT CAUSE FLYAWAYS!
+    // compute pseudocontrol
+    float dv[MAXV];
+    dv[0] = zSpfSpBody - 9.81f * acc.accADC[Z] * acc.dev.acc_1G_rec;
+    dv[1] = alphaSpBody.V.X - dgyro[FD_ROLL];
+    dv[2] = alphaSpBody.V.Y - dgyro[FD_PITCH];
+    dv[3] = alphaSpBody.V.Z - dgyro[FD_YAW];
+
+    // add in G2 contributions G2 * du
+    for (int j=0; j < nv; j++) {
+        for (int i=0; i < nu; i++) {
+            dv[j] += G2[j][i]*du[i];
+        }
+    }
+
+    // compute pseudoinverse pinv(G1+G2)
+    // TODO: use solver
+    float G1G2_inv[MAXU][MAXV] = {
+        {-0.0254842f,   0.00042246f,  0.0007886f,   0.00246437f},
+        {-0.0254842f,  -0.00042246f,  0.0007886f,  -0.00246437f},
+        {-0.0254842f,  -0.00042246f, -0.0007886f,   0.00246437f},
+        {-0.0254842f,   0.00042246f, -0.0007886f,  -0.00246437f},
+    };
+
+    // du = Ginv * dv and then constrain between 0 and 1
+    for (int i=0; i < nu; i++) {
+        float accumulate = G1G2_inv[i][0] * dv[0];
+        for (int j=1; j < nv; j++)
+            accumulate += G1G2_inv[i][j] * dv[j];
+        u[i] = constrainf(u_state[i] + accumulate, 0.f, 1.f);// currentPidProfile->motor_output_limit * 0.01f);
+        du[i] = u[i] - u_state[i];
+
+        // apply lag filter to simulate spinup dynamics
+        u_state[i] = pt1FilterApply(&actLag[i], u[i]);
+
+        // apply dgyro filters
+        u_state[i] = pidRuntime.dtermNotchApplyFn((filter_t *)&actNotch[i], u_state[i]);
+        u_state[i] = pidRuntime.dtermLowpassApplyFn((filter_t *)&actLowpass[i], u_state[i]);
+        u_state[i] = pidRuntime.dtermLowpass2ApplyFn((filter_t *)&actLowpass2[i], u_state[i]);
+    }
 }
 
 void getYawRateSpBody(void) {
-    /*
-    if (attTrackYaw) {
-        // just track yaw setpoint from attitude quaternion setpoint
-        // no need to deal with anything
-        yawRateSpBody.V.X = 0.;
-        yawRateSpBody.V.Y = 0.;
-        yawRateSpBody.V.Z = 0.;
-        return;
-    }
-    */
     // get yawRateSpNed, unless assumed set by position controller
     if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
         // get from RC
@@ -214,15 +284,15 @@ void getSpfSpBodyZ(void) {
         zSpfSpBody *= RC_SCALE_THROTTLE * RC_MAX_SPF_Z;
     } else {
         // assume that zAccSpNed has been set by position controller
-        zSpfSpBody = (-9.81 + zAccSpNed);
+        zSpfSpBody = (-9.81f + zAccSpNed);
 
         float cos_tilt_angle = getCosTiltAngle();
-        if ((cos_tilt_angle < 0.5) && (cos_tilt_angle > 0.)) {
+        if ((cos_tilt_angle < 0.5f) && (cos_tilt_angle > 0.f)) {
             // high tilt, but not inverted, limit divisor to 0.5
-            cos_tilt_angle = 0.5;
-        } else if (cos_tilt_angle <= 0.) {
+            cos_tilt_angle = 0.5f;
+        } else if (cos_tilt_angle <= 0.f) {
             // inverted: disable throttle correction
-            cos_tilt_angle = 1.0;
+            cos_tilt_angle = 1.0f;
         }
 
         zSpfSpBody /= cos_tilt_angle;
@@ -283,8 +353,8 @@ void getAttErrBody(void) {
         // which results in a sort of radial deadzone past the x*y=1 circle
         float roll = getSetpointRate(ROLL) * RC_SCALE_STICKS;
         float pitch = getSetpointRate(PITCH) * RC_SCALE_STICKS;
-#define RC_MAX_TILT_DEG 20
-        float rc_scaler = tanf(DEGREES_TO_RADIANS(RC_MAX_TILT_DEG));
+#define RC_MAX_TILT_DEG 20.f
+        float rc_scaler = tan_approx(DEGREES_TO_RADIANS(RC_MAX_TILT_DEG));
         t_fp_vector bodyZspNed = {
             .V.X = rc_scaler * (-stickXNed.V.X * pitch + -stickYNed.V.X * roll),
             .V.Y = rc_scaler * (-stickXNed.V.Y * pitch + -stickYNed.V.Y * roll),
@@ -301,10 +371,10 @@ void getAttErrBody(void) {
         t_fp_vector bodyZNed = quatRotMatCol(attEstNed, 2);
         float k_cos_theta = VEC3_DOT(bodyZNed, bodyZspNed);
         t_fp_vector axis;
-        if (k_cos_theta <= -0.9999) {
+        if (k_cos_theta <= -0.9999f) {
             // we are upside down with respect to the target z axis.
             // --> choose some orthogonal axis and rotate 180 degrees.
-            attErrBody.qi = 0;
+            attErrBody.qi = 0.f;
 
             // in particular choose cross product with the most orthogonal
             // coordinate axis for speed.
@@ -315,19 +385,19 @@ void getAttErrBody(void) {
             // axis = normalize( cross(bodyZNed, most_ortho) )
             switch(most_ortho){
                 case 0:
-                    axis.V.X = 0.;
+                    axis.V.X = 0.f;
                     axis.V.Y = +bodyZNed.V.Z;
                     axis.V.Z = -bodyZNed.V.Y;
                     break;
                 case 1:
                     axis.V.X = -bodyZNed.V.Z;
-                    axis.V.Y = 0.;
+                    axis.V.Y = 0.f;
                     axis.V.Z = +bodyZNed.V.X;
                     break;
                 case 2:
                     axis.V.X = +bodyZNed.V.Y;
                     axis.V.Y = -bodyZNed.V.X;
-                    axis.V.Z = 0.;
+                    axis.V.Z = 0.f;
                     break;
             }
             VEC3_NORMALIZE(axis);
@@ -339,7 +409,7 @@ void getAttErrBody(void) {
             // scalar = k_cos_theta + 1
             // axis = cross(bodyZNed, bodyZSpNed)
             // normalize the quat
-            attErrBody.qi = k_cos_theta + 1.;
+            attErrBody.qi = k_cos_theta + 1.f;
             VEC3_CROSS(axis, bodyZNed, bodyZspNed);
             attErrBody.qx = axis.V.X;
             attErrBody.qy = axis.V.Y;
@@ -348,10 +418,37 @@ void getAttErrBody(void) {
         }
     } else {
         // not sure what happened, just command upright
-        attSpNed.qi = 1.;
-        attSpNed.qx = 0.;
-        attSpNed.qy = 0.;
-        attSpNed.qz = 0.;
+        attSpNed.qi = 1.f;
+        attSpNed.qx = 0.f;
+        attSpNed.qy = 0.f;
+        attSpNed.qz = 0.f;
         attErrBody = quatMult(attEstNedInv, attSpNed);
     }
 }
+
+float indiThrustLinearization(float in) {
+    if ((A < 1.f) || (B < 0.f))
+        // no thrust lin requested/configured or misconfigured
+        return in;
+
+    if ((in <= 0.f) || (in >= 1.f))
+        // input out of range
+        return in;
+
+    return sqrtf(A*in + B) + C;
+}
+
+float indiThrustCurve(float in) {
+    return k*sq(in) + (1-k)*in;
+}
+
+// TODO;
+/* 
+ * 1. DONE use FLIGHT_MODE to decide rc mode
+ * 2. DONE incoorperate thrust linearization
+ * 3. deal with G2
+ * 4. logging of quat setpoint, quat attitude, omega setpoint, omega, alpha setpoint, alpha, motor setpoint
+ * 5. use actual settings built-ins
+ * 6. rewrite with different quaternion structs
+ * 7. activeSetSolve
+*/

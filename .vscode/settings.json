@@ -18,8 +18,11 @@
         "ranges": "c",
         "cstdio": "c",
         "typeconversion.h": "c",
-        "gps.h": "c"
+        "gps.h": "c",
+        "dshot_bitbang.h": "c",
+        "platform.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true,
-    "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch"
+    "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch",
+    "cmake.configureOnOpen": false
 }

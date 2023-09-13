@@ -43,13 +43,13 @@ void updatePosCtl(timeUs_t current) {
 
 void getAccSpNed(void) {
     // precalculations
-    float accMax = tanf( DEGREES_TO_RADIANS( MAX_BANK_DEGREE ) );
+    float accMax = tan_approx( DEGREES_TO_RADIANS( MAX_BANK_DEGREE ) );
     float posHGainPCasc = posHGainP / posHGainD; // emulate parallel PD with Casc system
     float posVGainPCasc = posVGainP / posVGainD;
 
     // pos error = pos setpoint - pos estimate
     t_fp_vector posError = posSpNed;
-    VEC3_SCALAR_MULT_ADD(posError, -1.0, extPosNed.pos);
+    VEC3_SCALAR_MULT_ADD(posError, -1.0f, extPosNed.pos);
     // vel setpoint = posGains * posError
     velSpNed.V.X = posError.V.X * posHGainPCasc;
     velSpNed.V.Y = posError.V.Y * posHGainPCasc;
@@ -61,7 +61,7 @@ void getAccSpNed(void) {
 
     // vel error = vel setpoint - vel estimate
     t_fp_vector velError = velSpNed;
-    VEC3_SCALAR_MULT_ADD(velError, -1.0, extPosNed.vel);
+    VEC3_SCALAR_MULT_ADD(velError, -1.0f, extPosNed.vel);
     // acceleration setpoint = velGains * velError
     accSpNed.V.X = velError.V.X * posHGainD;
     accSpNed.V.Y = velError.V.Y * posHGainD;
@@ -98,17 +98,17 @@ void getAttSpNed(void) {
     //    attSp =       yaw                *              tilt
 
     fp_quaternion_t sp_yaw = {
-        .qi = cosf(yawSpNedRad/2),
+        .qi = cos_approx(yawSpNedRad/2),
         .qx = 0.,
         .qy = 0.,
-        .qz = sinf(yawSpNedRad/2)
+        .qz = sin_approx(yawSpNedRad/2)
     };
 
     float acc_mag = VEC3_XY_LENGTH(accSpNed);
-    float tilt_angle = 0.;
+    float tilt_angle = 0.f;
     t_fp_vector tilt_axis = {0};
 
-    if (acc_mag > 1e-6) {
+    if (acc_mag > 1e-6f) {
         tilt_angle = atanf(acc_mag);
         // define axis such that:
         //     positive rotation through tilt angle aligns thrust axis correctly
@@ -117,9 +117,9 @@ void getAttSpNed(void) {
     }
 
     fp_quaternion_t sp_tilt = {
-        .qi = cosf(tilt_angle/2),
-        .qx = tilt_axis.V.X * sinf(tilt_angle/2),
-        .qy = tilt_axis.V.Y * sinf(tilt_angle/2),
+        .qi = cos_approx(tilt_angle/2.f),
+        .qx = tilt_axis.V.X * sin_approx(tilt_angle/2.f),
+        .qy = tilt_axis.V.Y * sin_approx(tilt_angle/2.f),
         .qz = 0.
     };
 

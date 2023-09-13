@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <float.h>
+#include <math.h>
 
 #ifndef sq
 #define sq(x) ((x)*(x))
@@ -115,7 +116,7 @@ typedef union u_fp_vector {
     )
 
 #define VEC3_NORMALIZE(_orig) { \
-    float _sc = 1. / VEC3_LENGTH(_orig); \
+    float _sc = VEC3_LENGTH(_orig) > 1e-8f ? 1.f / VEC3_LENGTH(_orig) : 0.f; \
     VEC3_SCALAR_MULT(_orig, _sc); \
 }
 
@@ -135,7 +136,7 @@ typedef union u_fp_vector {
     )
 
 #define QUAT_NORMALIZE(_orig) { \
-    float _sc = 1. / QUAT_LENGTH(_orig); \
+    float _sc = QUAT_LENGTH(_orig) > 1e-8f ? 1.f / QUAT_LENGTH(_orig) : 0.f; \
     QUAT_SCALAR_MULT(_orig, _sc); \
 }
 
@@ -148,8 +149,8 @@ typedef union u_fp_vector {
 
 #define VEC3_CONSTRAIN_XY_LENGTH(_vec, _max_length) { \
     float _vec_len = VEC3_XY_LENGTH(_vec); \
-    _vec.V.X /= constrainf(_vec_len / _max_length, 1., +FLT_MAX); \
-    _vec.V.Y /= constrainf(_vec_len / _max_length, 1., +FLT_MAX); \
+    _vec.V.X /= constrainf(_vec_len / _max_length, 1.f, +FLT_MAX); \
+    _vec.V.Y /= constrainf(_vec_len / _max_length, 1.f, +FLT_MAX); \
 }
 
 #define VEC3_DOT(_a, _b) ( \

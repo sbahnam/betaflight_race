@@ -108,16 +108,16 @@ void f2a (double dbl, unsigned int base, char *bf)
         return;
     }
 
-    char first_digit;
+    unsigned int first_digit;
     unsigned int remainder;
     if (dbl >= (double) base) {
-        while ((first_digit = ((dbl / d) >= 127.L) ? (base + 1) : (char) (dbl / d)) >= base) {
+        while ((first_digit = ((dbl / d) >= 127.L) ? (base + 1) : (unsigned int) (dbl / d)) >= base) {
 	        d *= base;
 	        e++;
 	    }
         remainder = (unsigned int) ((((dbl / d) - first_digit) * 1e3L) + .5L);
     } else {
-        while ((first_digit = (char) (dbl * d)) < 1) {
+        while ((first_digit = (unsigned int) (dbl * d)) < 1) {
 	        d *= base;
 	        e--;
 	    }
