@@ -6902,7 +6902,7 @@ void cliEnter(serialPort_t *serialPort)
 #else
     cliPrintLine("\r\nCLI");
 #endif
-    setArmingDisabled(ARMING_DISABLED_CLI);
+    //setArmingDisabled(ARMING_DISABLED_CLI); // tblaha: highway to the dangerzone TODO
 
     cliPrompt();
 

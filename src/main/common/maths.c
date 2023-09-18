@@ -174,7 +174,7 @@ t_fp_vector quatRotMatCol(fp_quaternion_t q, uint8_t axis) {
         case 2:
             // Z: v = (0 0 0 1)
             res.V.X = 2*q.qx*q.qz + 2*q.qi*q.qy;
-            res.V.Z = 2*q.qy*q.qz - 2*q.qi*q.qx;
+            res.V.Y = 2*q.qy*q.qz - 2*q.qi*q.qx;
             res.V.Z = 1 - 2*(q.qx*q.qx + q.qy*q.qy);
             break;
     }
@@ -400,6 +400,13 @@ float quickMedianFilter9f(float * v)
 }
 
 void arraySubInt32(int32_t *dest, int32_t *array1, int32_t *array2, int count)
+{
+    for (int i = 0; i < count; i++) {
+        dest[i] = array1[i] - array2[i];
+    }
+}
+
+void arraySubInt16(int16_t *dest, int16_t *array1, int16_t *array2, int count)
 {
     for (int i = 0; i < count; i++) {
         dest[i] = array1[i] - array2[i];

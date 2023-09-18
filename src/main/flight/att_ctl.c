@@ -6,6 +6,7 @@
 
 #include "sensors/gyro.h"
 #include "sensors/acceleration.h"
+#include "fc/core.h"
 #include "fc/rc.h"
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
@@ -16,8 +17,19 @@
 #include "drivers/dshot.h"
 #include <math.h>
 #include "config/config.h"
+#include "setupWLS.h"
+#include "solveActiveSet.h"
+
+#include "pg/pg.h"
 
 #include <stdbool.h>
+
+//PG_REGISTER_WITH_RESET_FN(indiConfig_t, indiConfig, PG_INDI_CONFIG, 1);
+//void pgResetFn_indiConfig(indiConfig_t* indiConfig) {
+//    RESET_CONFIG_2(indiConfig_t, indiConfig,
+//        .attGains = {.V.X = 800.f, .V.Y = 800.f, .V.Z = 200.f}
+//    )
+//}
 
 #define RC_SCALE_STICKS 0.002f
 #define RC_SCALE_THROTTLE 0.001f
@@ -36,17 +48,20 @@ t_fp_vector alphaSpBody = {0};
 t_fp_vector yawRateSpBody = {0};
 float zSpfSpBody = 0.;
 
-t_fp_vector attGains = {.V.X = 800.f, .V.Y = 800.f, .V.Z = 200.f};
+t_fp_vector attGains = {.V.X = 300.f, .V.Y = 300.f, .V.Z = 100.f};
 t_fp_vector rateGains = {.V.X = 13.f, .V.Y = 13.f, .V.Z = 10.f};
 
 float u[MAXU] = {0.f};
+float u_output[MAXU] = {0.f};
 float omega[MAXU] = {0.f};
 float omega_hover = 1900.f;
 float u_state[MAXU] = {0.f};
-float v[MAXV];
-float nu = 4;
-float nv = 4;
+float u_state_sync[MAXU] = {0.f};
+float dv[MAXV];
+int nu = 4;
+int nv = 4;
 
+float dgyro[XYZ_AXIS_COUNT];
 biquadFilter_t dgyroNotch[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass2[XYZ_AXIS_COUNT];
@@ -66,30 +81,32 @@ float Tmax = 4.5f;
 dtermLowpass_t erpmLowpass[MAXU];
 #endif
 
+// refurbish this code somehow
+#if (MAXU > AS_N_U) || (MAXV > AS_N_V)
+#error "Sizes may be too much for ActiveSetCtlAlloc library"
+#endif
 
-// linearization
-float A = 0.f;
-float B = 0.f;
-float C = 0.f;
-float k = 0.f;
+quadLin_t thrustLin = {.A = 0.f, .B = 0.f, .C = 0.f, .k = 0.f};
 
 void indiInit(const pidProfile_t * pidProfile) {
     UNUSED(pidProfile);
 
     // init states
     //nu = motorDeviceCount();
-    for (int i = 0; i < nu; i++)
+    for (int i = 0; i < nu; i++) {
         u_state[i] = 0.f;
+        u_state_sync[i] = 0.f;
+    }
     for (int i = 0; i < nv; i++)
-        v[i] = 0.f;
+        dv[i] = 0.f;
 
     // init thrust linearization https://www.desmos.com/calculator/v9q7cxuffs
     float k_conf = pidProfile->thrustLinearization / 100.f;
     if ((k_conf > 0.025) && (k_conf < 0.7)) {
-        k = k_conf;
-        A = 1.f / k;
-        B = (sq(k) - 2.f*k + 1.f) / (4.f*sq(k));
-        C = (k - 1) / (2.f*k);
+        thrustLin.k = k_conf;
+        thrustLin.A = 1.f / thrustLin.k;
+        thrustLin.B = (sq(thrustLin.k) - 2.f*thrustLin.k + 1.f) / (4.f*sq(thrustLin.k));
+        thrustLin.C = (thrustLin.k - 1) / (2.f*thrustLin.k);
     }
 
     // init dgyro filters (just copy init values from pid_init)
@@ -210,14 +227,14 @@ void getMotor(void) {
         { -10.97752222f,  -10.97752222f,  -10.97752222f,  -10.97752222f},
         { 505.80871408f, -505.80871408f, -505.80871408f,  505.80871408f},
         { 305.98392703f,  305.98392703f, -305.98392703f, -305.98392703f},
-        {  63.62310934f,  -63.62310934f,   63.62310934f,  -63.62310934f},
+        { -63.62310934f,   63.62310934f,  -63.62310934f,   63.62310934f},
     };
 
     float G2[4][4] = {
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
-        {0.002285f, -0.002285f,  0.002285f, -0.002285f},
+        {-0.00434639f, 0.00434639,  -0.00434639, 0.00434639},
     };
 
     // 1 / (2 tau k)
@@ -228,7 +245,6 @@ void getMotor(void) {
     static float omega_prev[MAXU] = {0.f};
 
     // get (filtered) gyro rate derivative
-    float dgyro[XYZ_AXIS_COUNT];
     for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
         dgyro[axis] = pidRuntime.pidFrequency * (gyro.gyroADCf[axis] - gyro_prev[axis]);
         dgyro[axis] = pidRuntime.dtermNotchApplyFn((filter_t *) &dgyroNotch[axis], dgyro[axis]);
@@ -240,7 +256,7 @@ void getMotor(void) {
     // get rotation speeds and accelerations from dshot, or fallback
     float omega_inv[MAXU];
     float omega_dot[MAXU] = {0.f};
-    for (int i = 0; i <= nu; i++) {
+    for (int i = 0; i < nu; i++) {
 #if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
         if (isDshotTelemetryActive()) {
             omega[i] = pidRuntime.dtermLowpassApplyFn((filter_t *) &erpmLowpass[i], getDshotTelemetry(i));
@@ -258,7 +274,7 @@ void getMotor(void) {
         }
 
         // needed later as well, not just for fallback
-        omega_inv[i] = (fabsf(omega[i]) > 0.5f * omega_hover) ? 1.f / omega[i] : 1.f / omega_hover;
+        omega_inv[i] = (fabsf(omega[i]) > (0.5f * omega_hover)) ? 1.f / omega[i] : 1.f / omega_hover;
 
 #if defined(USE_OMEGA_DOT_FEEDBACK) && defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
         if (isDshotTelemetryActive()) {
@@ -271,12 +287,14 @@ void getMotor(void) {
         }
     }
 
+    // use INDI only when in the air, solve global problem otherwise
+    bool doIndi = !isTouchingGround();
+
     // compute pseudocontrol
-    float dv[MAXV];
-    dv[0] = zSpfSpBody - 9.81f * acc.accADC[Z] * acc.dev.acc_1G_rec;
-    dv[1] = alphaSpBody.V.X - dgyro[FD_ROLL];
-    dv[2] = alphaSpBody.V.Y - dgyro[FD_PITCH];
-    dv[3] = alphaSpBody.V.Z - dgyro[FD_YAW];
+    dv[0] = zSpfSpBody - doIndi * 9.81f * (-acc.accADC[Z]) * acc.dev.acc_1G_rec;
+    dv[1] = alphaSpBody.V.X - doIndi * dgyro[FD_ROLL];
+    dv[2] = alphaSpBody.V.Y - doIndi * dgyro[FD_PITCH];
+    dv[3] = alphaSpBody.V.Z - doIndi * dgyro[FD_YAW];
 
     // add in G2 contributions G2 * omega_dot
     for (int j=0; j < nv; j++) {
@@ -287,31 +305,87 @@ void getMotor(void) {
 
     // compute pseudoinverse pinv(G1+G2)
     // TODO: use solver
-    float G1G2[MAXV][MAXU];
+    float G1G2[MAXU*MAXV];
     for (int i=0; i < nv; i++) {
         for (int j=0; j < nu; j++) {
-            G1G2[i][j] = G1[i][j] + G2_normalizer * G2[i][j] * omega_inv[i];
+            G1G2[nv*j + i] = G1[i][j] + G2_normalizer * G2[i][j] * omega_inv[i];
         }
     }
 
-    float G1G2_inv[MAXU][MAXV];
+    float Wv_as[MAXV] = {sqrtf(10.f), sqrtf(100.f), sqrtf(100.f), sqrtf(1.f)};
+    float Wu_as[MAXU] = {1.f, 1.f, 1.f, 1.f};
+    float theta = 1e-4f;
+    float cond_bound = 1e9;
+    int imax = 1;
+    activeSetAlgoChoice as_choice = AS_QR;
+
+    float gamma_used;
+    float A_as[(MAXU+MAXV) * MAXU];
+    float b_as[(MAXU+MAXV)];
+    float du_as[MAXU];
+    float du_min[MAXU];
+    float du_max[MAXU];
+    float du_pref[MAXU];
+
+    for (int i=0; i < nu; i++) {
+        // todo: what if negative u are possible?
+        du_min[i]  = 0.f - doIndi*u_state[i];
+        du_max[i]  = 1.f - doIndi*u_state[i];
+        du_pref[i] = 0.f - doIndi*u_state[i];
+    }
+
+    // setup problem
+    setupWLS_A(G1G2, Wv_as, Wu_as, nv, nu, theta, cond_bound, A_as, &gamma_used);
+    setupWLS_b(dv, du_pref, Wv_as, Wu_as, nv, nu, gamma_used, b_as);
+    static int8_t Ws[MAXU];
+    static int8_t as_exit_code = AS_SUCCESS;
+
+    for (int i=0; i < nu; i++) {
+      du_as[i] = (du_min[i] + du_max[i]) * 0.5;
+      // Assume warmstart is always desired and reset working set Ws only if 
+      // if NAN errors were encountered
+      if (as_exit_code >= AS_NAN_FOUND_Q)
+        Ws[i] = 0;
+    }
+
+    // solve problem
+    int iterations;
+    int n_free;
+#ifdef AS_RECORD_COST
+    static float alloc_costs[AS_RECORD_COST_N] = {0.f};
+#else
+    static float alloc_costs[];
+#endif
+
+    as_exit_code = solveActiveSet(as_choice)(
+      A_as, b_as, du_min, du_max, du_as, Ws, imax, nu, nv,
+      &iterations, &n_free, alloc_costs);
+
+    //float G1G2_inv[MAXU][MAXV];
     // pseudoinverse or something?
 
     // du = Ginv * dv and then constrain between 0 and 1
     for (int i=0; i < nu; i++) {
-        float accumulate = G1G2_inv[i][0] * dv[0];
-        for (int j=1; j < nv; j++)
-            accumulate += G1G2_inv[i][j] * dv[j];
-        u[i] = constrainf(u_state[i] + accumulate, 0.f, 1.f);// currentPidProfile->motor_output_limit * 0.01f);
-        du[i] = u[i] - u_state[i];
+        //float accumulate = G1G2_inv[i][0] * dv[0];
+        //for (int j=1; j < nv; j++)
+        //    accumulate += G1G2_inv[i][j] * dv[j];
+        u[i] = constrainf(doIndi*u_state[i] + du_as[i], 0.f, 1.f);// currentPidProfile->motor_output_limit * 0.01f);
 
         // apply lag filter to simulate spinup dynamics
-        u_state[i] = pt1FilterApply(&actLag[i], u[i]);
+        if (ARMING_FLAG(ARMED)) {
+            du[i] = u[i] - u_state[i]; // actual du. SHOULD be identical to du_as, when doIndi
+            u_state[i] = pt1FilterApply(&actLag[i], u[i]);
+        } else {
+            du[i] = 0.f; // because we actually dont spin. if we don't do this, G2 term gets confused
+            u_state[i] = 0.f;
+        }
 
-        // apply dgyro filters
-        u_state[i] = pidRuntime.dtermNotchApplyFn((filter_t *)&actNotch[i], u_state[i]);
-        u_state[i] = pidRuntime.dtermLowpassApplyFn((filter_t *)&actLowpass[i], u_state[i]);
-        u_state[i] = pidRuntime.dtermLowpass2ApplyFn((filter_t *)&actLowpass2[i], u_state[i]);
+        u_output[i] = indiThrustLinearization(thrustLin, u[i]);
+
+        // apply dgyro filters to sync with input
+        u_state_sync[i] = pidRuntime.dtermNotchApplyFn((filter_t *)&actNotch[i], u_state[i]);
+        u_state_sync[i] = pidRuntime.dtermLowpassApplyFn((filter_t *)&actLowpass[i], u_state_sync[i]);
+        u_state_sync[i] = pidRuntime.dtermLowpass2ApplyFn((filter_t *)&actLowpass2[i], u_state_sync[i]);
     }
 }
 
@@ -381,7 +455,7 @@ void getAttErrBody(void) {
     attEstNedInv.qi = -attEstNed.qi;
 
     // get error
-    if (FLIGHT_MODE(POS_CTL_MODE)) {
+    if (FLIGHT_MODE(POSITION_MODE)) {
         attErrBody = quatMult(attEstNedInv, attSpNed);
     } else if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
 
@@ -471,7 +545,8 @@ void getAttErrBody(void) {
             // axis = cross(bodyZNed, bodyZSpNed)
             // normalize the quat
             attErrBody.qi = k_cos_theta + 1.f;
-            VEC3_CROSS(axis, bodyZNed, bodyZspNed);
+            VEC3_CROSS(axis, bodyZspNed, bodyZNed);
+            axis = quatRotate(attEstNedInv, axis);
             attErrBody.qx = axis.V.X;
             attErrBody.qy = axis.V.Y;
             attErrBody.qz = axis.V.Z;
@@ -487,8 +562,8 @@ void getAttErrBody(void) {
     }
 }
 
-float indiThrustLinearization(float in) {
-    if ((A < 1.f) || (B < 0.f))
+float indiThrustLinearization(quadLin_t lin, float in) {
+    if ((lin.A < 1.f) || (lin.B < 0.f))
         // no thrust lin requested/configured or misconfigured
         return in;
 
@@ -496,20 +571,25 @@ float indiThrustLinearization(float in) {
         // input out of range
         return in;
 
-    return sqrtf(A*in + B) + C;
+    return sqrtf(lin.A*in + lin.B) + lin.C;
 }
 
-float indiThrustCurve(float in) {
-    return k*sq(in) + (1-k)*in;
+float indiThrustCurve(quadLin_t lin, float in) {
+    return lin.k*sq(in) + (1-lin.k)*in;
 }
 
 // TODO;
 /* 
  * 1. DONE use FLIGHT_MODE to decide rc mode
  * 2. DONE incoorperate thrust linearization
- * 3. deal with G2
+ * 3. DONE deal with G2
  * 4. logging of quat setpoint, quat attitude, omega setpoint, omega, alpha setpoint, alpha, motor setpoint
  * 5. use actual settings built-ins
  * 6. rewrite with different quaternion structs
- * 7. activeSetSolve
+ * 7. DONE activeSetSolve
+ * 8. do not check min throttle for indi integrating, breakes down in pos_ctl
+ * 9. deal with what happens if neither pos not att are selected
+ * 10. compiler macros for USE_ACC
+ * 11. REMOVE OMEGA_DOT_FEEDBACK compiler macro
+ * 12. REMOVE some PI compiler macros
 */

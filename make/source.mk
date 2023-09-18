@@ -482,3 +482,31 @@ SRC += $(PI_DIR)/pi-messages.c
 #SIZE_OPTIMISED_SRC += $(PI_DIR)/pi-protocol.c
 #SIZE_OPTIMISED_SRC += $(PI_DIR)/pi-messages.c
 endif
+
+# Do the same for the ActiveSetCtlAlloc
+AS_SRC_DIR = $(ROOT)/lib/main/ActiveSetCtlAlloc/src
+
+ifneq ($(AS_SRC_DIR),)
+INCLUDE_DIRS += $(AS_SRC_DIR)
+INCLUDE_DIRS += $(AS_SRC_DIR)/common/
+INCLUDE_DIRS += $(AS_SRC_DIR)/lib/
+AS_SRC = $(AS_SRC_DIR)/common/solveActiveSet.c
+AS_SRC += $(AS_SRC_DIR)/common/setupWLS.c
+AS_SRC += $(AS_SRC_DIR)/solveActiveSet_chol.c
+AS_SRC += $(AS_SRC_DIR)/solveActiveSet_qr.c
+AS_SRC += $(AS_SRC_DIR)/solveActiveSet_qr_naive.c
+AS_SRC += $(AS_SRC_DIR)/lib/chol_math.c
+AS_SRC += $(AS_SRC_DIR)/lib/qr_updates.c
+AS_SRC += $(AS_SRC_DIR)/lib/qr_wrapper.c
+AS_SRC += $(AS_SRC_DIR)/lib/qr_solve/qr_solve.c
+AS_SRC += $(AS_SRC_DIR)/lib/qr_solve/r8lib_min.c
+AS_SRC += $(AS_SRC_DIR)/lib/sparse_math.c
+SRC += $(AS_SRC)
+SPEED_OPTIMISED_SRC += $(AS_SRC)
+OPTIONS += "AS_N_U=8"
+OPTIONS += "AS_N_V=6"
+OPTIONS += "AS_SINGLE_FLOAT"
+OPTIONS += "AS_COST_TRUNCATE"
+OPTIONS += "AS_RECORD_COST"
+OPTIONS += "AS_RECORD_COST_N=5"
+endif

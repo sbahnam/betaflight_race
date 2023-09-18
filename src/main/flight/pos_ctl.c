@@ -8,12 +8,12 @@
 
 // --- control variables
 // externs
-t_fp_vector posSpNed = {.V.X = 0., .V.Y = 0., .V.Z = -1.};
-t_fp_vector velSpNed = {.V.X = 0., .V.Y = 0., .V.Z = 0.};
 t_fp_vector accSpNed = {.V.X = 0., .V.Y = 0., .V.Z = 0.};
 
 // locals
-float yawSpNedRad = 0.;
+//t_fp_vector posSpNed = {.V.X = 0., .V.Y = 0., .V.Z = -1.};
+//t_fp_vector velSpNed = {.V.X = 0., .V.Y = 0., .V.Z = 0.};
+//float yawSpNedRad = 0.;
 
 // position controller configuration
 // todo DONE: split in horizontal/vertical, not XYZ.. thats kinda meaningless with yaw
@@ -48,19 +48,19 @@ void getAccSpNed(void) {
     float posVGainPCasc = posVGainP / posVGainD;
 
     // pos error = pos setpoint - pos estimate
-    t_fp_vector posError = posSpNed;
+    t_fp_vector posError = posSetpointNed.pos;
     VEC3_SCALAR_MULT_ADD(posError, -1.0f, extPosNed.pos);
     // vel setpoint = posGains * posError
-    velSpNed.V.X = posError.V.X * posHGainPCasc;
-    velSpNed.V.Y = posError.V.Y * posHGainPCasc;
-    velSpNed.V.Z = posError.V.Z * posVGainPCasc;
+    posSetpointNed.vel.V.X = posError.V.X * posHGainPCasc;
+    posSetpointNed.vel.V.Y = posError.V.Y * posHGainPCasc;
+    posSetpointNed.vel.V.Z = posError.V.Z * posVGainPCasc;
 
     // constrain magnitude here
-    VEC3_CONSTRAIN_XY_LENGTH(velSpNed, velSpLimitXY);
-    velSpNed.V.Z = constrainf(velSpNed.V.Z, -velSpLimitZ, +velSpLimitZ);
+    VEC3_CONSTRAIN_XY_LENGTH(posSetpointNed.vel, velSpLimitXY);
+    posSetpointNed.vel.V.Z = constrainf(posSetpointNed.vel.V.Z, -velSpLimitZ, +velSpLimitZ);
 
     // vel error = vel setpoint - vel estimate
-    t_fp_vector velError = velSpNed;
+    t_fp_vector velError = posSetpointNed.vel;
     VEC3_SCALAR_MULT_ADD(velError, -1.0f, extPosNed.vel);
     // acceleration setpoint = velGains * velError
     accSpNed.V.X = velError.V.X * posHGainD;
@@ -98,10 +98,10 @@ void getAttSpNed(void) {
     //    attSp =       yaw                *              tilt
 
     fp_quaternion_t sp_yaw = {
-        .qi = cos_approx(yawSpNedRad/2),
+        .qi = cos_approx(posSetpointNed.psi/2),
         .qx = 0.,
         .qy = 0.,
-        .qz = sin_approx(yawSpNedRad/2)
+        .qz = sin_approx(posSetpointNed.psi/2)
     };
 
     float acc_mag = VEC3_XY_LENGTH(accSpNed);

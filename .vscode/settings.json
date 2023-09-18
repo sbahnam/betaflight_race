@@ -20,7 +20,9 @@
         "typeconversion.h": "c",
         "gps.h": "c",
         "dshot_bitbang.h": "c",
-        "platform.h": "c"
+        "platform.h": "c",
+        "pg_ids.h": "c",
+        "mixer.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true,
     "cortex-debug.gdbPath.linux": "/usr/bin/gdb-multiarch",

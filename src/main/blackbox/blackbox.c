@@ -64,10 +64,13 @@
 #include "flight/servos.h"
 #include "flight/gps_rescue.h"
 #include "flight/position.h"
+#include "flight/imu.h"
+#include "flight/att_ctl.h"
 
 #include "io/beeper.h"
 #include "io/gps.h"
 #include "io/serial.h"
+#include "io/external_pos.h"
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
@@ -247,7 +250,72 @@ static const blackboxDeltaFieldDefinition_t blackboxMainFields[] = {
     {"motor",       7, UNSIGNED, .Ipredict = PREDICT(MOTOR_0), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(AT_LEAST_MOTORS_8)},
 
     /* Tricopter tail servo */
-    {"servo",       5, UNSIGNED, .Ipredict = PREDICT(1500),    .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(TRICOPTER)}
+    {"servo",       5, UNSIGNED, .Ipredict = PREDICT(1500),    .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(TRICOPTER)},
+
+    /* INDI stuff*/
+#ifdef USE_INDI
+    {"quat",        0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quat",        1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quat",        2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quat",        3, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+
+    {"alpha",       0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"alpha",       1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"alpha",       2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+
+    {"quatSp",      0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quatSp",      1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quatSp",      2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+    {"quatSp",      3, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(TAG8_4S16), CONDITION(INDI)},
+
+    {"gyroSp",      0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"gyroSp",      1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"gyroSp",      2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+
+    {"alphaSp",     0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"alphaSp",     1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"alphaSp",     2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+
+    {"dv",          0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"dv",          1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"dv",          2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"dv",          3, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"dv",          4, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+    {"dv",          5, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(INDI)},
+
+    {"u",       0, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       1, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       2, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       3, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       4, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       5, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       6, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u",       7, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+
+    {"u_state",       0, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       1, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       2, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       3, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       4, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       5, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       6, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+    {"u_state",       7, UNSIGNED, .Ipredict = PREDICT(0), .Iencode = ENCODING(TAG8_8SVB), .Ppredict = PREDICT(PREVIOUS), .Pencode = ENCODING(TAG8_8SVB), CONDITION(INDI)},
+#endif
+
+#if USE_POS_CTL
+    {"pos",      0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"pos",      1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"pos",      2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+
+    {"posSp",    0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"posSp",    1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"posSp",    2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+
+    {"vel",      0, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"vel",      1, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+    {"vel",      2, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(PREVIOUS),      .Pencode = ENCODING(SIGNED_VB), CONDITION(POS)},
+#endif
+
 };
 
 #ifdef USE_GPS
@@ -328,6 +396,21 @@ typedef struct blackboxMainState_s {
     int32_t surfaceRaw;
 #endif
     uint16_t rssi;
+#ifdef USE_INDI
+    int16_t quat[4];
+    int16_t alpha[XYZ_AXIS_COUNT];
+    int16_t quatSp[4];
+    int16_t gyroSp[XYZ_AXIS_COUNT];
+    int16_t alphaSp[XYZ_AXIS_COUNT];
+    int16_t dv[MAXV];
+    int16_t u[MAXU];
+    int16_t u_state[MAXU];
+#endif
+#ifdef USE_POS_CTL
+    int32_t pos[XYZ_AXIS_COUNT]; // will be mm, so must be more than 16bit
+    int32_t posSp[XYZ_AXIS_COUNT];
+    int16_t vel[XYZ_AXIS_COUNT]; // will be cm/s, so this is fine
+#endif
 } blackboxMainState_t;
 
 typedef struct blackboxGpsState_s {
@@ -495,6 +578,20 @@ static bool testBlackboxConditionUncached(FlightLogFieldCondition condition)
     case CONDITION(DEBUG_LOG):
         return (debugMode != DEBUG_NONE) && isFieldEnabled(FIELD_SELECT(DEBUG_LOG));
 
+    case CONDITION(INDI):
+#ifdef USE_INDI
+        return isFieldEnabled(FIELD_SELECT(INDI));
+#else
+        return false;
+#endif
+
+    case CONDITION(POS):
+#ifdef USE_POS_CTL
+        return isFieldEnabled(FIELD_SELECT(POS));
+#else
+        return false;
+#endif
+
     case CONDITION(NEVER):
         return false;
 
@@ -656,6 +753,26 @@ static void writeIntraframe(void)
         }
     }
 
+#ifdef USE_INDI
+    if (testBlackboxCondition(CONDITION(INDI))) {
+        blackboxWriteSigned16VBArray(blackboxCurrent->quat, 4);
+        blackboxWriteSigned16VBArray(blackboxCurrent->alpha, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(blackboxCurrent->quatSp, 4);
+        blackboxWriteSigned16VBArray(blackboxCurrent->gyroSp, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(blackboxCurrent->alphaSp, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(blackboxCurrent->dv, MAXV);
+        blackboxWriteSigned16VBArray(blackboxCurrent->u, MAXU);
+        blackboxWriteSigned16VBArray(blackboxCurrent->u_state, MAXU);
+    }
+#endif
+#ifdef USE_POS_CTL
+    if (testBlackboxCondition(CONDITION(INDI))) {
+        blackboxWriteSignedVBArray(blackboxCurrent->pos, XYZ_AXIS_COUNT);
+        blackboxWriteSignedVBArray(blackboxCurrent->posSp, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(blackboxCurrent->vel, XYZ_AXIS_COUNT);
+    }
+#endif
+
     //Rotate our history buffers:
 
     //The current state becomes the new "before" state
@@ -796,6 +913,45 @@ static void writeInterframe(void)
             blackboxWriteSignedVB(blackboxCurrent->servo[5] - blackboxLast->servo[5]);
         }
     }
+
+#ifdef USE_INDI
+    if (testBlackboxCondition(CONDITION(INDI))) {
+        // quat attitude
+        arraySubInt16(deltas, blackboxCurrent->quat, blackboxLast->quat, 4);
+        blackboxWriteTag8_4S16(deltas);
+
+        // rotational accel
+        arraySubInt16(deltas, blackboxCurrent->alpha, blackboxLast->alpha, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(deltas, XYZ_AXIS_COUNT);
+
+        // quat setpoints
+        arraySubInt16(deltas, blackboxCurrent->quatSp, blackboxLast->quatSp, 4);
+        blackboxWriteTag8_4S16(deltas);
+
+        // rotational rate setpoint
+        arraySubInt16(deltas, blackboxCurrent->gyroSp, blackboxLast->gyroSp, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(deltas, XYZ_AXIS_COUNT);
+
+        // rotational accel setpoint
+        arraySubInt16(deltas, blackboxCurrent->alphaSp, blackboxLast->alphaSp, XYZ_AXIS_COUNT);
+        blackboxWriteSigned16VBArray(deltas, XYZ_AXIS_COUNT);
+
+        // dv
+        arraySubInt16(deltas, blackboxCurrent->dv, blackboxLast->dv, MAXV);
+        blackboxWriteSigned16VBArray(deltas, MAXV);
+
+        // u
+        arraySubInt16(deltas, blackboxCurrent->u, blackboxLast->u, MAXU);
+        blackboxWriteTag8_8SVB(deltas, MAXU);
+
+        // u_state
+        arraySubInt16(deltas, blackboxCurrent->u_state, blackboxLast->u_state, MAXU);
+        blackboxWriteTag8_8SVB(deltas, MAXU);
+    }
+#endif
+
+#ifdef USE_POS_CTL
+#endif
 
     //Rotate our history buffers
     blackboxHistory[2] = blackboxHistory[1];
@@ -1115,6 +1271,42 @@ static void loadMainState(timeUs_t currentTimeUs)
     //Tail servo for tricopters
     blackboxCurrent->servo[5] = servo[5];
 #endif
+
+#ifdef USE_INDI
+    blackboxCurrent->quat[0] = lrintf(attitude_q.w  * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quat[1] = lrintf(attitude_q.x  * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quat[2] = lrintf(-attitude_q.y * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quat[3] = lrintf(-attitude_q.z * UNIT_FLOAT_TO_SIGNED16VB); // FRD and not FLU
+    blackboxCurrent->alpha[0] = lrintf(DEGREES_TO_RADIANS(dgyro[FD_ROLL]));
+    blackboxCurrent->alpha[1] = lrintf(DEGREES_TO_RADIANS(dgyro[FD_PITCH]));
+    blackboxCurrent->alpha[2] = lrintf(DEGREES_TO_RADIANS(dgyro[FD_YAW]));
+    blackboxCurrent->quatSp[0] = lrintf(attSpNed.qi * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quatSp[1] = lrintf(attSpNed.qx * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quatSp[2] = lrintf(attSpNed.qy * UNIT_FLOAT_TO_SIGNED16VB);
+    blackboxCurrent->quatSp[3] = lrintf(attSpNed.qz * UNIT_FLOAT_TO_SIGNED16VB); // FRD and not FLU
+    blackboxCurrent->gyroSp[0] = lrintf(DEGREES_TO_RADIANS(rateSpBody.V.X));
+    blackboxCurrent->gyroSp[1] = lrintf(DEGREES_TO_RADIANS(rateSpBody.V.Y));
+    blackboxCurrent->gyroSp[2] = lrintf(DEGREES_TO_RADIANS(rateSpBody.V.Z));
+    blackboxCurrent->alphaSp[0] = lrintf(DEGREES_TO_RADIANS(alphaSpBody.V.X));
+    blackboxCurrent->alphaSp[1] = lrintf(DEGREES_TO_RADIANS(alphaSpBody.V.Y));
+    blackboxCurrent->alphaSp[2] = lrintf(DEGREES_TO_RADIANS(alphaSpBody.V.Z));
+    for (int i=0; i < MAXU; i++)
+        blackboxCurrent->u[i] = lrintf(u[i] * UNIT_FLOAT_TO_SIGNED16VB);
+    for (int i=0; i < MAXU; i++)
+        blackboxCurrent->u_state[i] = lrintf(u_state[i] * UNIT_FLOAT_TO_SIGNED16VB);
+#endif
+#ifdef USE_POS_CTL
+    blackboxCurrent->pos[0] = lrintf(extPosNed.pos.V.X * METER_TO_MM);
+    blackboxCurrent->pos[1] = lrintf(extPosNed.pos.V.Y * METER_TO_MM);
+    blackboxCurrent->pos[2] = lrintf(extPosNed.pos.V.Z * METER_TO_MM);
+    blackboxCurrent->posSp[0] = lrintf(posSetpointNed.pos.V.X * METER_TO_MM);
+    blackboxCurrent->posSp[1] = lrintf(posSetpointNed.pos.V.Y * METER_TO_MM);
+    blackboxCurrent->posSp[2] = lrintf(posSetpointNed.pos.V.Z * METER_TO_MM);
+    blackboxCurrent->vel[0] = lrintf(extPosNed.vel.V.X * METER_TO_CM);
+    blackboxCurrent->vel[1] = lrintf(extPosNed.vel.V.Y * METER_TO_CM);
+    blackboxCurrent->vel[2] = lrintf(extPosNed.vel.V.Z * METER_TO_CM);
+#endif
+
 #else
     UNUSED(currentTimeUs);
 #endif // UNIT_TEST
@@ -1559,6 +1751,8 @@ static bool blackboxWriteSysinfo(void)
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_GPS_RESCUE_VELOCITY_I, "%d",      gpsRescueConfig()->velI)
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_GPS_RESCUE_VELOCITY_D, "%d",      gpsRescueConfig()->velD)
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_GPS_RESCUE_YAW_P, "%d",           gpsRescueConfig()->yawP)
+
+        BLACKBOX_PRINT_HEADER_LINE("INDI att gain x", "%d",           600)
 
  
 #ifdef USE_MAG

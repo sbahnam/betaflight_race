@@ -1000,11 +1000,17 @@ void processRxModes(timeUs_t currentTimeUs)
 #endif
 
 #ifdef USE_POS_CTL
-    if (IS_RC_MODE_ACTIVE(BOXPOSCTL) && sensors(SENSOR_ACC) && (extPosState > EXT_POS_NO_SIGNAL)){
-        if (!FLIGHT_MODE(POS_CTL_MODE))
-            ENABLE_FLIGHT_MODE(POS_CTL_MODE);
-        else
-            DISABLE_FLIGHT_MODE(POS_CTL_MODE);
+    if (IS_RC_MODE_ACTIVE(BOXPOSCTL) && sensors(SENSOR_ACC)) {
+        // logic can be improved by considering ext_pos_state. this logic means
+        // that whenever external pos drops out, we will get a 1 0 0 0 attitude
+        // command, but no automatic piloted-fallback
+        if (!FLIGHT_MODE(ANGLE_MODE))
+            ENABLE_FLIGHT_MODE(ANGLE_MODE); // prerequesite
+
+        if (!FLIGHT_MODE(POSITION_MODE))
+            ENABLE_FLIGHT_MODE(POSITION_MODE);
+    } else {
+        DISABLE_FLIGHT_MODE(POSITION_MODE);
     }
 #endif
 
@@ -1097,6 +1103,19 @@ void processRxModes(timeUs_t currentTimeUs)
     pidSetAntiGravityState(IS_RC_MODE_ACTIVE(BOXANTIGRAVITY) || featureIsEnabled(FEATURE_ANTI_GRAVITY));
 }
 
+bool isTouchingGround(void) {
+    // if total trust is low, but we have high total accel then we are likely touching ground
+    bool accHigh = (sq(acc.dev.acc_1G_rec) * (
+        sq(acc.accADC[X])
+        + sq(acc.accADC[Y])
+        + sq(acc.accADC[Z])
+        )) > 0.8*0.8;
+    float throttleLowThresh = (float) (rxConfig()->mincheck + 50);
+    bool throttleLow = rcCommand[THROTTLE] < throttleLowThresh;
+
+    return (accHigh && throttleLow);
+}
+
 #ifdef USE_INDI
 static FAST_CODE_NOINLINE void subTaskIndiController(timeUs_t currentTimeUs) {
     UNUSED(currentTimeUs);
@@ -1142,13 +1161,10 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
             u[0] = 0.0f;
         */
 
-        // check pidApplyThrustLinearization(float motorOutput)
-        motor[0] = scaleRangef(u[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[1] = scaleRangef(u[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[2] = scaleRangef(u[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[3] = scaleRangef(u[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        for (int i = 0; i < numMotors; i++)
-            motor[i] = indiThrustLinearization(motor[i]);
+        motor[0] = scaleRangef(u_output[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[1] = scaleRangef(u_output[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[2] = scaleRangef(u_output[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        motor[3] = scaleRangef(u_output[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
     }
 
     writeMotors();

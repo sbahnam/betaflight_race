@@ -39,7 +39,7 @@ Py = 0.5709
 Pz = 0.6295 # Period for z-axis rotation
 
 # propeller config
-direc = [1, -1, 1, -1] # motor rotation directions (positive -> right hand down), sequence FL, FR, RR, RL
+direc = [-1, 1, -1, 1] # motor rotation directions (positive -> right hand along prop thrust vector), sequence FL, FR, RR, RL
 
 # prop inertia
 #Iprop = 1e-6 # shameless guess for now
@@ -47,6 +47,8 @@ Pp = (525 - 275) / 30 / 20 # counting frames for 20 periods, fps 30.000. One fra
 Rp = 36.0 * 1e-3 # 1mm error: 10% error in inertia --> estimated precision 0.5mm, so 5% error
 mp = 1.40 * 1e-3 # 1% error: 1% error in inertia --> estimated precision 0.02g, so 1.5% error
 Iprop = pendulumInertiaFromPeriod(Pp, Rp, mp) # red prop
+Ibell = 0.006 * 0.009**2 # assuming the bell weights half of the motor, so 6 gram. Diameter 19mm
+Iprop += Ibell
 
 # propeller performance
 tau = 0.02 # spinup/spindown time constant

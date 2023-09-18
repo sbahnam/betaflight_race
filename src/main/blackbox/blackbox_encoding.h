@@ -34,3 +34,8 @@ void blackboxWriteTag8_4S16(int32_t *values);
 void blackboxWriteTag8_8SVB(int32_t *values, int valueCount);
 void blackboxWriteU32(int32_t value);
 void blackboxWriteFloat(float value);
+
+// scaling
+#define UNIT_FLOAT_TO_SIGNED16VB ((127 << 6) - 1) // float from -1 to +1 to VB that takes up 2 bytes max
+#define METER_TO_MM 1000
+#define METER_TO_CM 100
