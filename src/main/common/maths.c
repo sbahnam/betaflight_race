@@ -413,6 +413,13 @@ void arraySubInt16(int16_t *dest, int16_t *array1, int16_t *array2, int count)
     }
 }
 
+void arraySubUint16(int16_t *dest, uint16_t *array1, uint16_t *array2, int count)
+{
+    for (int i = 0; i < count; i++) {
+        dest[i] = array1[i] - array2[i];
+    }
+}
+
 int16_t qPercent(fix12_t q)
 {
     return (100 * q) >> 12;

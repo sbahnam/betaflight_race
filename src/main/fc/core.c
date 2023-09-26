@@ -1105,13 +1105,25 @@ void processRxModes(timeUs_t currentTimeUs)
 
 bool isTouchingGround(void) {
     // if total trust is low, but we have high total accel then we are likely touching ground
+    // this breaks down for fixed wings, and probably "3D" thrust ESCs
     bool accHigh = (sq(acc.dev.acc_1G_rec) * (
         sq(acc.accADC[X])
         + sq(acc.accADC[Y])
         + sq(acc.accADC[Z])
         )) > 0.8*0.8;
-    float throttleLowThresh = (float) (rxConfig()->mincheck + 50);
-    bool throttleLow = rcCommand[THROTTLE] < throttleLowThresh;
+
+    bool throttleLow = true;
+    if (FLIGHT_MODE(POSITION_MODE)) {
+        // new flight mode
+        throttleLow = spfSpBody.V.Z > -3.f; // N/kg (ie. m/s^2)
+    } else if (FLIGHT_MODE(GPS_RESCUE_MODE)) {
+        // existing GPS rescue, no idea if works, never tried
+        throttleLow = gpsRescueGetThrottle() < 0.1f;
+    } else {
+        // human pilot, get RC throttle
+        float throttleLowThresh = (float) (rxConfig()->mincheck + 50);
+        throttleLow = rcCommand[THROTTLE] < throttleLowThresh;
+    }
 
     return (accHigh && throttleLow);
 }
@@ -1135,7 +1147,7 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
         }
         //firstArmed = 0;
     } else {
-        /* test program
+        /* test program for motor test bench. Use with care. Won't ask, just blast.
         if (firstArmed == 0)
             firstArmed = currentTimeUs;
 
@@ -1161,10 +1173,9 @@ static FAST_CODE_NOINLINE void subTaskIndiApplyToActuators(timeUs_t currentTimeU
             u[0] = 0.0f;
         */
 
-        motor[0] = scaleRangef(u_output[2], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[1] = scaleRangef(u_output[1], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[2] = scaleRangef(u_output[3], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
-        motor[3] = scaleRangef(u_output[0], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        for (int i = 0; i < numMotors; i++) {
+            motor[i] = scaleRangef(u_output[i], 0., 1., mixerRuntime.motorOutputLow, mixerRuntime.motorOutputHigh);
+        }
     }
 
     writeMotors();

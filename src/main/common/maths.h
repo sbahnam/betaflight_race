@@ -250,6 +250,8 @@ float pow_approx(float a, float b);
 #endif
 
 void arraySubInt32(int32_t *dest, int32_t *array1, int32_t *array2, int count);
+void arraySubInt16(int16_t *dest, int16_t *array1, int16_t *array2, int count);
+void arraySubUint16(int16_t *dest, uint16_t *array1, uint16_t *array2, int count);
 
 int16_t qPercent(fix12_t q);
 int16_t qMultiply(fix12_t q, int16_t input);

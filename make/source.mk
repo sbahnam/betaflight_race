@@ -474,6 +474,7 @@ endif
 
 # Do the same for the pi-protocol
 PI_DIR = $(ROOT)/lib/main/pi-protocol/src
+PI_GEN_FILES = $(PI_DIR)/pi-protocol.h $(PI_DIR)/pi-messages.h $(PI_DIR)/pi-messages.c
 
 ifneq ($(PI_DIR),)
 INCLUDE_DIRS += $(PI_DIR)

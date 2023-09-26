@@ -34,7 +34,7 @@
 #define RC_SCALE_STICKS 0.002f
 #define RC_SCALE_THROTTLE 0.001f
 #define RC_OFFSET_THROTTLE 1000.f
-#define RC_MAX_YAWRATE_DEG_S 150.f
+#define RC_MAX_YAWRATE_DEG_S 300.f
 #define RC_MAX_SPF_Z -30.f
 
 fp_quaternion_t attSpNed = {.qi=1.f};
@@ -46,22 +46,22 @@ fp_quaternion_t attErrBody = {.qi=1.f};
 t_fp_vector rateSpBody = {0};
 t_fp_vector alphaSpBody = {0};
 t_fp_vector yawRateSpBody = {0};
-float zSpfSpBody = 0.;
+t_fp_vector spfSpBody = {0};
 
-t_fp_vector attGains = {.V.X = 300.f, .V.Y = 300.f, .V.Z = 100.f};
-t_fp_vector rateGains = {.V.X = 13.f, .V.Y = 13.f, .V.Z = 10.f};
+t_fp_vector attGains = {.V.X = 100.f, .V.Y = 100.f, .V.Z = 50.f};
+t_fp_vector rateGains = {.V.X = 15.f, .V.Y = 15.f, .V.Z = 7.f};
 
 float u[MAXU] = {0.f};
 float u_output[MAXU] = {0.f};
 float omega[MAXU] = {0.f};
+float omega_dot[MAXU] = {0.f};
 float omega_hover = 1900.f;
-float u_state[MAXU] = {0.f};
-float u_state_sync[MAXU] = {0.f};
+float u_state[MAXU];
+float u_state_sync[MAXU];
 float dv[MAXV];
 int nu = 4;
-int nv = 4;
 
-float dgyro[XYZ_AXIS_COUNT];
+float alpha[XYZ_AXIS_COUNT];
 biquadFilter_t dgyroNotch[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass[XYZ_AXIS_COUNT];
 dtermLowpass_t dgyroLowpass2[XYZ_AXIS_COUNT];
@@ -75,6 +75,9 @@ dtermLowpass_t actLowpass2[MAXU];
 float k_thrust  = 2.58e-7f;
 float tau_rpm = 0.02f;
 float Tmax = 4.5f;
+
+#define ERPM_PER_LSB             100.0f
+float erpmToRad;
 
 // low pass for rpm sensing
 #if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
@@ -91,13 +94,16 @@ quadLin_t thrustLin = {.A = 0.f, .B = 0.f, .C = 0.f, .k = 0.f};
 void indiInit(const pidProfile_t * pidProfile) {
     UNUSED(pidProfile);
 
+    erpmToRad = ERPM_PER_LSB / 60.f / (motorConfig()->motorPoleCount / 2.f) * (2.f * M_PIf);
+
     // init states
     //nu = motorDeviceCount();
     for (int i = 0; i < nu; i++) {
         u_state[i] = 0.f;
         u_state_sync[i] = 0.f;
+        omega[i] = 0.f;
     }
-    for (int i = 0; i < nv; i++)
+    for (int i = 0; i < MAXV; i++)
         dv[i] = 0.f;
 
     // init thrust linearization https://www.desmos.com/calculator/v9q7cxuffs
@@ -109,7 +115,7 @@ void indiInit(const pidProfile_t * pidProfile) {
         thrustLin.C = (thrustLin.k - 1) / (2.f*thrustLin.k);
     }
 
-    // init dgyro filters (just copy init values from pid_init)
+    // init alpha filters (just copy init values from pid_init)
     for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
         dgyroNotch[axis] = pidRuntime.dtermNotch[axis];
         dgyroLowpass[axis] = pidRuntime.dtermLowpass[axis];
@@ -118,10 +124,10 @@ void indiInit(const pidProfile_t * pidProfile) {
 
     for (int i = 0; i < nu; i++) {
         // init backup actuator state filters
-        pt1FilterInit(&actLag[i], pt1FilterGain(1.f / actTimeConst, pidRuntime.dT));
+        pt1FilterInit(&actLag[i], pt1FilterGain(1.f / (2.f * M_PIf * actTimeConst), pidRuntime.dT));
 
         // rpm feedback filter. A bit handwavy, but using filter constant from
-        // dgyro lp seems most correct
+        // alpha lp seems most correct
 #if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
         erpmLowpass[i] = pidRuntime.dtermLowpass[0];
 #endif
@@ -223,22 +229,26 @@ void getMotor(void) {
     };
     */
 
-    float G1[4][4] = {
+    float G1[MAXV][4] = {
+        {0.f, 0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f, 0.f},
         { -10.97752222f,  -10.97752222f,  -10.97752222f,  -10.97752222f},
-        { 505.80871408f, -505.80871408f, -505.80871408f,  505.80871408f},
-        { 305.98392703f,  305.98392703f, -305.98392703f, -305.98392703f},
-        { -63.62310934f,   63.62310934f,  -63.62310934f,   63.62310934f},
+        { -505.80871408f, -505.80871408f,  505.80871408f,  505.80871408f},
+        { -305.98392703f,  305.98392703f, -305.98392703f,  305.98392703f},
+        { -63.62310934f,   63.62310934f,   63.62310934f,  -63.62310934f},
     };
 
-    float G2[4][4] = {
+    float G2[MAXV][4] = {
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
         {0.f, 0.f, 0.f, 0.f},
-        {-0.00434639f, 0.00434639,  -0.00434639, 0.00434639},
+        {0.f, 0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f, 0.f},
+        {-0.00507791f, 0.00507791f,  0.00507791f, -0.00507791f},
     };
 
     // 1 / (2 tau k)
-    float G2_normalizer = 96899224.f;
+    float G2_normalizer = 176366843.f;
 
     static float du[MAXU] = {0.f};
     static float gyro_prev[XYZ_AXIS_COUNT] = {0.f, 0.f, 0.f};
@@ -246,24 +256,24 @@ void getMotor(void) {
 
     // get (filtered) gyro rate derivative
     for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
-        dgyro[axis] = pidRuntime.pidFrequency * (gyro.gyroADCf[axis] - gyro_prev[axis]);
-        dgyro[axis] = pidRuntime.dtermNotchApplyFn((filter_t *) &dgyroNotch[axis], dgyro[axis]);
-        dgyro[axis] = pidRuntime.dtermLowpassApplyFn((filter_t *) &dgyroLowpass[axis], dgyro[axis]);
-        dgyro[axis] = pidRuntime.dtermLowpass2ApplyFn((filter_t *) &dgyroLowpass2[axis], dgyro[axis]);
+        alpha[axis] = pidRuntime.pidFrequency * DEGREES_TO_RADIANS(gyro.gyroADCf[axis] - gyro_prev[axis]);
+        if ((axis == FD_PITCH) || (axis == FD_YAW))
+            alpha[axis] *= (-1.f);
+        alpha[axis] = pidRuntime.dtermNotchApplyFn((filter_t *) &dgyroNotch[axis], alpha[axis]);
+        alpha[axis] = pidRuntime.dtermLowpassApplyFn((filter_t *) &dgyroLowpass[axis], alpha[axis]);
+        alpha[axis] = pidRuntime.dtermLowpass2ApplyFn((filter_t *) &dgyroLowpass2[axis], alpha[axis]);
         gyro_prev[axis] = gyro.gyroADCf[axis];
     }
 
     // get rotation speeds and accelerations from dshot, or fallback
     float omega_inv[MAXU];
-    float omega_dot[MAXU] = {0.f};
     for (int i = 0; i < nu; i++) {
 #if defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
         if (isDshotTelemetryActive()) {
-            omega[i] = pidRuntime.dtermLowpassApplyFn((filter_t *) &erpmLowpass[i], getDshotTelemetry(i));
-            // to get to rad/s, multiply with erpm scaling (100), then divide by pole pairs and convert rpm to rad
-            omega[i] *= 100.f * (motorConfig()->motorPoleCount / 2.f) * (2.f * M_PIf / 60.f);
-
             omega_prev[i] = omega[i];
+
+            // to get to rad/s, multiply with erpm scaling (100), then divide by pole pairs and convert rpm to rad
+            omega[i] = pidRuntime.dtermLowpassApplyFn((filter_t *) &erpmLowpass[i], erpmToRad * getDshotTelemetry(i));
         } else
 #endif
         {
@@ -275,7 +285,13 @@ void getMotor(void) {
 
         // needed later as well, not just for fallback
         omega_inv[i] = (fabsf(omega[i]) > (0.5f * omega_hover)) ? 1.f / omega[i] : 1.f / omega_hover;
+    }
 
+    // use INDI only when in the air, solve global problem otherwise
+    bool doIndi = !isTouchingGround();
+
+    // get motor acceleration
+    for (int i = 0; i < nu; i++) {
 #if defined(USE_OMEGA_DOT_FEEDBACK) && defined(USE_DSHOT) && defined(USE_DSHOT_TELEMETRY)
         if (isDshotTelemetryActive()) {
             omega_dot[i] = (omega[i] - omega_prev[i]) * pidRuntime.pidFrequency;
@@ -283,36 +299,35 @@ void getMotor(void) {
         } else
 #endif
         {
-            omega_dot[i] = Tmax * du[i] * omega_inv[i] * G2_normalizer;
+            omega_dot[i] = (Tmax * du[i]) * omega_inv[i] * G2_normalizer;
         }
     }
 
-    // use INDI only when in the air, solve global problem otherwise
-    bool doIndi = !isTouchingGround();
-
     // compute pseudocontrol
-    dv[0] = zSpfSpBody - doIndi * 9.81f * (-acc.accADC[Z]) * acc.dev.acc_1G_rec;
-    dv[1] = alphaSpBody.V.X - doIndi * dgyro[FD_ROLL];
-    dv[2] = alphaSpBody.V.Y - doIndi * dgyro[FD_PITCH];
-    dv[3] = alphaSpBody.V.Z - doIndi * dgyro[FD_YAW];
+    dv[0] = 0.f;
+    dv[1] = 0.f;
+    dv[2] = spfSpBody.V.Z - doIndi * 9.81f * (-acc.accADC[Z]) * acc.dev.acc_1G_rec;
+    dv[3] = alphaSpBody.V.X - doIndi * alpha[FD_ROLL];
+    dv[4] = alphaSpBody.V.Y - doIndi * alpha[FD_PITCH];
+    dv[5] = alphaSpBody.V.Z - doIndi * alpha[FD_YAW];
 
     // add in G2 contributions G2 * omega_dot
-    for (int j=0; j < nv; j++) {
+    for (int j=0; j < MAXV; j++) {
         for (int i=0; i < nu; i++) {
-            dv[j] += G2[j][i]*omega_dot[i];
+            dv[j] += doIndi * G2[j][i]*omega_dot[i] / Tmax;
         }
     }
 
     // compute pseudoinverse pinv(G1+G2)
-    // TODO: use solver
+    // TODO: use solver DONE
     float G1G2[MAXU*MAXV];
-    for (int i=0; i < nv; i++) {
-        for (int j=0; j < nu; j++) {
-            G1G2[nv*j + i] = G1[i][j] + G2_normalizer * G2[i][j] * omega_inv[i];
+    for (int i=0; i < nu; i++) {
+        for (int j=0; j < MAXV; j++) {
+            G1G2[MAXV*i + j] = G1[j][i] + G2_normalizer * omega_inv[i] * G2[j][i];
         }
     }
 
-    float Wv_as[MAXV] = {sqrtf(10.f), sqrtf(100.f), sqrtf(100.f), sqrtf(1.f)};
+    float Wv_as[MAXV] = {sqrtf(1.f), sqrtf(1.f), sqrtf(100.f), sqrtf(100.f), sqrtf(100.f), sqrtf(1.f)};
     float Wu_as[MAXU] = {1.f, 1.f, 1.f, 1.f};
     float theta = 1e-4f;
     float cond_bound = 1e9;
@@ -327,16 +342,17 @@ void getMotor(void) {
     float du_max[MAXU];
     float du_pref[MAXU];
 
+    float motorMax = constrainf(50.f * 0.01f, 0.05f, 1.0f); // make parameter
     for (int i=0; i < nu; i++) {
         // todo: what if negative u are possible?
         du_min[i]  = 0.f - doIndi*u_state[i];
-        du_max[i]  = 1.f - doIndi*u_state[i];
+        du_max[i]  = motorMax - doIndi*u_state[i]; //todo exchange for some existing parameter? 
         du_pref[i] = 0.f - doIndi*u_state[i];
     }
 
     // setup problem
-    setupWLS_A(G1G2, Wv_as, Wu_as, nv, nu, theta, cond_bound, A_as, &gamma_used);
-    setupWLS_b(dv, du_pref, Wv_as, Wu_as, nv, nu, gamma_used, b_as);
+    setupWLS_A(G1G2, Wv_as, Wu_as, MAXV, nu, theta, cond_bound, A_as, &gamma_used);
+    setupWLS_b(dv, du_pref, Wv_as, Wu_as, MAXV, nu, gamma_used, b_as);
     static int8_t Ws[MAXU];
     static int8_t as_exit_code = AS_SUCCESS;
 
@@ -358,7 +374,7 @@ void getMotor(void) {
 #endif
 
     as_exit_code = solveActiveSet(as_choice)(
-      A_as, b_as, du_min, du_max, du_as, Ws, imax, nu, nv,
+      A_as, b_as, du_min, du_max, du_as, Ws, imax, nu, MAXV,
       &iterations, &n_free, alloc_costs);
 
     //float G1G2_inv[MAXU][MAXV];
@@ -369,10 +385,10 @@ void getMotor(void) {
         //float accumulate = G1G2_inv[i][0] * dv[0];
         //for (int j=1; j < nv; j++)
         //    accumulate += G1G2_inv[i][j] * dv[j];
-        u[i] = constrainf(doIndi*u_state[i] + du_as[i], 0.f, 1.f);// currentPidProfile->motor_output_limit * 0.01f);
+        u[i] = constrainf(doIndi*u_state[i] + du_as[i], 0.f, motorMax);// currentPidProfile->motor_output_limit * 0.01f);
 
         // apply lag filter to simulate spinup dynamics
-        if (ARMING_FLAG(ARMED)) {
+        if (ARMING_FLAG(ARMED) || true) {
             du[i] = u[i] - u_state[i]; // actual du. SHOULD be identical to du_as, when doIndi
             u_state[i] = pt1FilterApply(&actLag[i], u[i]);
         } else {
@@ -391,9 +407,9 @@ void getMotor(void) {
 
 void getYawRateSpBody(void) {
     // get yawRateSpNed, unless assumed set by position controller
-    if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
-        // get from RC
-        yawRateSpNed = getSetpointRate(YAW) * RC_SCALE_STICKS;
+    if ( (!FLIGHT_MODE(POSITION_MODE)) && (!FLIGHT_MODE(GPS_RESCUE_MODE)) ) {
+        // human pilot, get from RC
+        yawRateSpNed = -getSetpointRate(YAW) * RC_SCALE_STICKS;
         yawRateSpNed *= DEGREES_TO_RADIANS(RC_MAX_YAWRATE_DEG_S);
     }
     // no else... just assume that yawRateSpNed has been set properly by the posiotion controller
@@ -413,13 +429,9 @@ void getYawRateSpBody(void) {
 void getSpfSpBodyZ(void) {
     // similar to getYawRateSpBody, decide which Ned z accel to use and transform
 
-    if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
-        // get from RC directly
-        zSpfSpBody = (rcCommand[THROTTLE] - RC_OFFSET_THROTTLE);
-        zSpfSpBody *= RC_SCALE_THROTTLE * RC_MAX_SPF_Z;
-    } else {
+    if (FLIGHT_MODE(POSITION_MODE)) {
         // assume that zAccSpNed has been set by position controller
-        zSpfSpBody = (-9.81f + zAccSpNed);
+        spfSpBody.V.Z = (-9.81f + zAccSpNed);
 
         float cos_tilt_angle = getCosTiltAngle();
         if ((cos_tilt_angle < 0.5f) && (cos_tilt_angle > 0.f)) {
@@ -430,7 +442,7 @@ void getSpfSpBodyZ(void) {
             cos_tilt_angle = 1.0f;
         }
 
-        zSpfSpBody /= cos_tilt_angle;
+        spfSpBody.V.Z /= cos_tilt_angle;
         // note: this only gives offset free pos control, if spfSpBodyZ is reached 
         //       offset-free, ie through INDI
         // note2: if accSpNed.V.Z is non-zero, then accSpNed is over or undershot.
@@ -439,6 +451,13 @@ void getSpfSpBodyZ(void) {
         //        constrained nl equations that can be solved within bounds.
 
         // this should probably be in pos_ctl, because of the tradeoff... another allocation step?
+    } else if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
+        // get from RC directly
+        spfSpBody.V.Z = (rcCommand[THROTTLE] - RC_OFFSET_THROTTLE);
+        spfSpBody.V.Z *= RC_SCALE_THROTTLE * RC_MAX_SPF_Z;
+    } else {
+        // command a downwards setpoint (positive)
+        spfSpBody.V.Z = 2.f;
     }
 }
 

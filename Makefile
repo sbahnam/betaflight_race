@@ -652,13 +652,13 @@ $(TARGET_EF_HASH_FILE):
 	$(V1) touch $(TARGET_EF_HASH_FILE)
 
 # pi-protocol make script
-generate_pi_protocol : 
+$(PI_GEN_FILES) : $(PI_DIR)/pi-protocol.c $(PI_DIR)/../config.yaml $(wildcard $(PI_DIR)/../messages/*) $(wildcard $(PI_DIR)/../templates/*.j2) $(PI_DIR)/../python/generate.py
 	@echo "generating pi protocol headers"
 	cd lib/main/pi-protocol/ && make generate CONFIG=config.yaml
 	@echo "done"
 
 # rebuild everything when makefile changes or the extra flags have changed or pi-protocol has changed
-$(TARGET_OBJS): $(TARGET_EF_HASH_FILE) Makefile $(TARGET_DIR)/target.mk $(wildcard make/*) generate_pi_protocol
+$(TARGET_OBJS): $(TARGET_EF_HASH_FILE) Makefile $(TARGET_DIR)/target.mk $(wildcard make/*) $(PI_GEN_FILES)
 
 # include auto-generated dependencies
 -include $(TARGET_DEPS)

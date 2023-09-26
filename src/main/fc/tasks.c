@@ -333,6 +333,7 @@ static void taskGpsPi(timeUs_t currentTimeUs)
 {
     getExternalPos(currentTimeUs);
     getFakeGps(currentTimeUs);
+    getPosSetpoint(currentTimeUs);
 }
 #endif
 

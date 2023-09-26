@@ -34,3 +34,4 @@ extern ext_pos_state_t posSetpointState;
 void checkNewPos(void);
 void getExternalPos(timeUs_t current);
 void getFakeGps(timeUs_t current);
+void getPosSetpoint(timeUs_t current);

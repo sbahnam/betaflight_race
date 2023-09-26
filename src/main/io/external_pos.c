@@ -83,9 +83,9 @@ void getExternalPos(timeUs_t current) {
     // extrapolate position with speed info
     timeDelta_t delta = cmpTimeUs(microsISR(), latestMsgTime);
     if (delta > 0) {
-        extPosNed.pos.V.X += ((float) delta * 1e-6f) * extPosNed.vel.V.X;
-        extPosNed.pos.V.Y += ((float) delta * 1e-6f) * extPosNed.vel.V.Y;
-        extPosNed.pos.V.Z += ((float) delta * 1e-6f) * extPosNed.vel.V.Z;
+        extPosNed.pos.V.X += ((float) delta) * 1e-6f * extPosNed.vel.V.X;
+        extPosNed.pos.V.Y += ((float) delta) * 1e-6f * extPosNed.vel.V.Y;
+        extPosNed.pos.V.Z += ((float) delta) * 1e-6f * extPosNed.vel.V.Z;
         // todo: extrapolate psi from body rates somehow using the quat
     }
 }

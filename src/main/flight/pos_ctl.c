@@ -17,9 +17,9 @@ t_fp_vector accSpNed = {.V.X = 0., .V.Y = 0., .V.Z = 0.};
 
 // position controller configuration
 // todo DONE: split in horizontal/vertical, not XYZ.. thats kinda meaningless with yaw
-float posHGainP = 1.0;
+float posHGainP = 0.4;
 float posHGainD = 1.5;
-float posVGainP = 2.5;
+float posVGainP = 1.0;
 float posVGainD = 2.5;
 float velSpLimitXY = 1.5;
 float velSpLimitZ  = 0.5;
